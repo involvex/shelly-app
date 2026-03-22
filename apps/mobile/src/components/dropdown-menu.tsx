@@ -8,6 +8,7 @@ import {
 	Platform,
 	UIManager,
 } from 'react-native'
+import type {TouchableOpacityProps, ViewProps} from 'react-native'
 import React, {createContext, useContext, useState} from 'react'
 import * as ZeegoMenu from 'zeego/dropdown-menu'
 
@@ -32,8 +33,11 @@ const JSRoot = ({children}: {children: React.ReactNode}) => {
 	)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const JSTrigger = ({children, asChild: _asChild, ...props}: any) => {
+const JSTrigger = ({
+	children,
+	asChild: _asChild,
+	...props
+}: TouchableOpacityProps & {asChild?: boolean}) => {
 	const ctx = useContext(MenuContext)
 	return (
 		<TouchableOpacity onPress={() => ctx?.setVisible(true)} {...props}>
@@ -79,8 +83,13 @@ const JSContent = ({children}: {children: React.ReactNode}) => {
 	)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const JSItem = ({children, onSelect}: any) => {
+const JSItem = ({
+	children,
+	onSelect,
+}: {
+	children: React.ReactNode
+	onSelect?: () => void
+}) => {
 	const ctx = useContext(MenuContext)
 	return (
 		<TouchableOpacity
@@ -95,12 +104,10 @@ const JSItem = ({children, onSelect}: any) => {
 	)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const JSItemTitle = ({children}: any) => (
+const JSItemTitle = ({children}: {children: React.ReactNode}) => (
 	<Text style={{color: 'white', fontSize: 16}}>{children}</Text>
 )
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const JSLabel = ({children}: any) => (
+const JSLabel = ({children}: {children: React.ReactNode}) => (
 	<Text
 		style={{color: '#71717a', fontSize: 12, padding: 8, fontWeight: 'bold'}}
 	>
@@ -111,12 +118,18 @@ const JSSeparator = () => (
 	<View style={{height: 1, backgroundColor: '#27272a'}} />
 )
 
+type JSItemIconProps = ViewProps & {
+	ios?: unknown
+	androidIconName?: string
+	children?: React.ReactNode
+}
+
 const JSItemIcon = ({
 	children,
 	ios: _ios,
 	androidIconName: _androidIconName,
 	...props
-}: any) => {
+}: JSItemIconProps) => {
 	return (
 		<View style={{marginRight: 8}} {...props}>
 			{children}
@@ -137,22 +150,22 @@ export const Separator = hasNativeMenu ? ZeegoMenu.Separator : JSSeparator
 
 export const Group = hasNativeMenu
 	? ZeegoMenu.Group
-	: ({children}: any) => <View>{children}</View>
+	: ({children}: {children: React.ReactNode}) => <View>{children}</View>
 
 export const Sub = hasNativeMenu
 	? ZeegoMenu.Sub
-	: ({children}: any) => <View>{children}</View>
+	: ({children}: {children: React.ReactNode}) => <View>{children}</View>
 
 export const SubContent = hasNativeMenu
 	? ZeegoMenu.SubContent
-	: ({children}: any) => <View>{children}</View>
+	: ({children}: {children: React.ReactNode}) => <View>{children}</View>
 export const SubTrigger = hasNativeMenu ? ZeegoMenu.SubTrigger : JSItem
 export const CheckboxItem = hasNativeMenu ? ZeegoMenu.CheckboxItem : JSItem
 export const ItemIcon = hasNativeMenu ? ZeegoMenu.ItemIcon : JSItemIcon
 
 export const ItemSubtitle = hasNativeMenu
 	? ZeegoMenu.ItemSubtitle
-	: ({children}: any) => (
+	: ({children}: {children: React.ReactNode}) => (
 			<Text style={{color: '#71717a', fontSize: 12}}>{children}</Text>
 		)
 export const ItemImage = ZeegoMenu.ItemImage
