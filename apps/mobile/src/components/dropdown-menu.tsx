@@ -8,9 +8,13 @@ import {
 	Platform,
 	UIManager,
 } from 'react-native'
-import type {TouchableOpacityProps, ViewProps} from 'react-native'
+import type {TextStyle, TouchableOpacityProps, ViewProps} from 'react-native'
 import React, {createContext, useContext, useState} from 'react'
 import * as ZeegoMenu from 'zeego/dropdown-menu'
+import {scaleText} from 'react-native-text'
+
+// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
+const textScaleStyle = scaleText({fontSize: 20})
 
 // Check if native MenuView is available (not available in Expo Go)
 const hasNativeMenu =
@@ -105,11 +109,18 @@ const JSItem = ({
 }
 
 const JSItemTitle = ({children}: {children: React.ReactNode}) => (
-	<Text style={{color: 'white', fontSize: 16}}>{children}</Text>
+	<Text style={{color: 'white', ...textScaleStyle}}>{children}</Text>
 )
 const JSLabel = ({children}: {children: React.ReactNode}) => (
 	<Text
-		style={{color: '#71717a', fontSize: 12, padding: 8, fontWeight: 'bold'}}
+		style={
+			{
+				color: '#71717a',
+				fontSize: textScaleStyle.fontSize * 0.8,
+				padding: 8,
+				fontWeight: 'bold',
+			} as TextStyle
+		}
 	>
 		{children}
 	</Text>
@@ -166,7 +177,9 @@ export const ItemIcon = hasNativeMenu ? ZeegoMenu.ItemIcon : JSItemIcon
 export const ItemSubtitle = hasNativeMenu
 	? ZeegoMenu.ItemSubtitle
 	: ({children}: {children: React.ReactNode}) => (
-			<Text style={{color: '#71717a', fontSize: 12}}>{children}</Text>
+			<Text style={{color: '#71717a', fontSize: textScaleStyle.fontSize * 0.8}}>
+				{children}
+			</Text>
 		)
 export const ItemImage = ZeegoMenu.ItemImage
 export const ItemIndicator = ZeegoMenu.ItemIndicator

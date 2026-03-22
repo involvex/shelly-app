@@ -127,7 +127,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 👤 Author
 
-**involvex**
+- **involvex**
 
 - GitHub: [@involvex](https://github.com/involvex)
 - Sponsor: [Support my work](https://github.com/sponsors/involvex)

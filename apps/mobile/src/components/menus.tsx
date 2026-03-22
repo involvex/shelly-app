@@ -1,11 +1,23 @@
 import {useProject, type PageContext} from '@/data/project'
 import * as Menu from '@/components/dropdown-menu'
 
-import {Alert, Platform, Text, View, Share, useColorScheme} from 'react-native'
+import {
+	Alert,
+	Platform,
+	Text,
+	View,
+	Share,
+	useColorScheme,
+	type TextStyle,
+} from 'react-native'
 import {MaterialIcons, Ionicons} from '@/components/icons'
+import {scaleText} from 'react-native-text'
 import {launchApp} from '@/lib/utils'
 import {router} from 'expo-router'
 import React from 'react'
+
+// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
+const textScaleStyle = scaleText({fontSize: 20})
 
 const COLORS: {hex: string; name: string}[] = [
 	{hex: '#FF3B31', name: 'Red'},
@@ -66,8 +78,17 @@ export function StylesMenu({children}: {children?: React.ReactElement}) {
 						<Menu.Group>
 							{TYPES.map(typeItem => (
 								<Menu.Item key={typeItem.name}>
-									<Menu.ItemTitle>{typeItem.name}</Menu.ItemTitle>
-									<Menu.ItemSubtitle>
+									<Menu.ItemTitle style={textScaleStyle}>
+										{typeItem.name}
+									</Menu.ItemTitle>
+									<Menu.ItemSubtitle
+										style={
+											{
+												fontSize: textScaleStyle.fontSize * 0.8,
+												color: '#6b7280',
+											} as TextStyle
+										}
+									>
 										{`${typeItem.size}, ${typeItem.weight}`}
 									</Menu.ItemSubtitle>
 								</Menu.Item>

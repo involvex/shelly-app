@@ -1,3 +1,4 @@
+const {hairlineWidth, platformSelect} = require('nativewind/theme')
 /** @type {import('tailwindcss').Config} */
 module.exports = {
 	content: ['./src/**/*.{js,jsx,ts,tsx}'],
@@ -7,69 +8,61 @@ module.exports = {
 		hoverOnlyWhenSupported: true,
 	},
 	theme: {
-		container: {
-			center: true,
-			padding: '2rem',
-			screens: {
-				'2xl': '1400px',
-			},
-		},
 		extend: {
 			colors: {
-				border: 'hsl(var(--border))',
-				input: 'hsl(var(--input))',
-				ring: 'hsl(var(--ring))',
-				background: 'hsl(var(--background))',
-				foreground: 'hsl(var(--foreground))',
+				border: withOpacity('border'),
+				input: withOpacity('input'),
+				ring: withOpacity('ring'),
+				background: withOpacity('background'),
+				foreground: withOpacity('foreground'),
 				primary: {
-					DEFAULT: 'hsl(var(--primary))',
-					foreground: 'hsl(var(--primary-foreground))',
+					DEFAULT: withOpacity('primary'),
+					foreground: withOpacity('primary-foreground'),
 				},
 				secondary: {
-					DEFAULT: 'hsl(var(--secondary))',
-					foreground: 'hsl(var(--secondary-foreground))',
+					DEFAULT: withOpacity('secondary'),
+					foreground: withOpacity('secondary-foreground'),
 				},
 				destructive: {
-					DEFAULT: 'hsl(var(--destructive))',
-					foreground: 'hsl(var(--destructive-foreground))',
+					DEFAULT: withOpacity('destructive'),
+					foreground: withOpacity('destructive-foreground'),
 				},
 				muted: {
-					DEFAULT: 'hsl(var(--muted))',
-					foreground: 'hsl(var(--muted-foreground))',
+					DEFAULT: withOpacity('muted'),
+					foreground: withOpacity('muted-foreground'),
 				},
 				accent: {
-					DEFAULT: 'hsl(var(--accent))',
-					foreground: 'hsl(var(--accent-foreground))',
+					DEFAULT: withOpacity('accent'),
+					foreground: withOpacity('accent-foreground'),
 				},
 				popover: {
-					DEFAULT: 'hsl(var(--popover))',
-					foreground: 'hsl(var(--popover-foreground))',
+					DEFAULT: withOpacity('popover'),
+					foreground: withOpacity('popover-foreground'),
 				},
 				card: {
-					DEFAULT: 'hsl(var(--card))',
-					foreground: 'hsl(var(--card-foreground))',
+					DEFAULT: withOpacity('card'),
+					foreground: withOpacity('card-foreground'),
 				},
 			},
-			borderRadius: {
-				lg: 'var(--radius)',
-				md: 'calc(var(--radius) - 2px)',
-				sm: 'calc(var(--radius) - 4px)',
-			},
-			keyframes: {
-				'accordion-down': {
-					from: {height: 0},
-					to: {height: 'var(--radix-accordion-content-height)'},
-				},
-				'accordion-up': {
-					from: {height: 'var(--radix-accordion-content-height)'},
-					to: {height: 0},
-				},
-			},
-			animation: {
-				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out',
+			borderWidth: {
+				hairline: hairlineWidth(),
 			},
 		},
 	},
 	plugins: [require('tailwindcss-animate')],
+}
+
+function withOpacity(variableName) {
+	return ({opacityValue}) => {
+		if (opacityValue !== undefined) {
+			return platformSelect({
+				ios: `rgb(var(--${variableName}) / ${opacityValue})`,
+				android: `rgb(var(--android-${variableName}) / ${opacityValue})`,
+			})
+		}
+		return platformSelect({
+			ios: `rgb(var(--${variableName}))`,
+			android: `rgb(var(--android-${variableName}))`,
+		})
+	}
 }

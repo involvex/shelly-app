@@ -1,7 +1,11 @@
 import React, {useEffect, useRef} from 'react'
+import {scaleText} from 'react-native-text'
 import {FitAddon} from '@xterm/addon-fit'
 import {Terminal} from '@xterm/xterm'
 import {View} from 'react-native'
+
+// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
+const textScaleStyle = scaleText({fontSize: 20})
 
 interface TerminalViewProps {
 	onData: (data: string) => void
@@ -29,7 +33,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 			cursorBlink: true,
 			theme: {background: '#000'},
 			fontFamily: 'monospace',
-			fontSize: 14,
+			fontSize: textScaleStyle.fontSize,
 		})
 
 		fitAddon.current = new FitAddon()

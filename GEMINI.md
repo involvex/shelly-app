@@ -87,6 +87,7 @@ The project uses ESLint for linting and Prettier for code formatting.
   ```
 
 - **Type Checking:**
+
   ```bash
   bun run typecheck
   ```

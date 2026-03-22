@@ -38,8 +38,9 @@ export const useSnippetStore = create<SnippetState>((set, get) => ({
 			// Add some defaults
 			const defaults: Snippet[] = [
 				{id: '1', name: 'Git Status', command: 'git status'},
-				{id: '2', name: 'Build Project', command: 'npm run build'},
-				{id: '3', name: 'List Files', command: 'ls -la'},
+				{id: '2', name: 'Build Project', command: 'bun run build'},
+				{id: '3', name: 'List Files', command: 'dir'},
+				{id: '4', name: 'Get .env', command: 'cat .env'},
 			]
 			set({snippets: defaults})
 			await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(defaults))

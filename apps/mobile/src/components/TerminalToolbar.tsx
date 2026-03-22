@@ -1,6 +1,10 @@
 import {ScrollView, Text, TouchableOpacity, View} from 'react-native'
+import {scaleText} from 'react-native-text'
 import * as Clipboard from 'expo-clipboard'
 import React from 'react'
+
+// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
+const textScaleStyle = scaleText({fontSize: 20})
 
 interface ToolbarButtonProps {
 	label: string
@@ -17,7 +21,9 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
 		onPress={onPress}
 		className={`px-3 py-2 rounded-md mx-1 ${primary ? 'bg-indigo-600' : 'bg-zinc-800'}`}
 	>
-		<Text className="text-white font-medium text-sm">{label}</Text>
+		<Text style={textScaleStyle} className="font-medium text-white">
+			{label}
+		</Text>
 	</TouchableOpacity>
 )
 
@@ -46,7 +52,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({onSend}) => {
 	]
 
 	return (
-		<View className="bg-zinc-900 border-t border-zinc-800 py-1">
+		<View className="py-1 border-t bg-zinc-900 border-zinc-800">
 			<ScrollView
 				horizontal
 				showsHorizontalScrollIndicator={false}

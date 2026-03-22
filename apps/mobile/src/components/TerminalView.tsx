@@ -7,9 +7,15 @@ import {
 	View,
 } from 'react-native'
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {scaleText} from 'react-native-text'
+
+// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
+const textScaleStyle = scaleText({fontSize: 20})
 
 // Strip ANSI escape sequences so raw terminal codes don't appear as garbage.
 const ANSI_RE =
+	// oxlint-disable-next-line no-control-regex
+	// eslint-disable-next-line no-control-regex
 	/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[()][A-Za-z0-9]|\x1b[=>]/g
 
 function processOutput(raw: string): string {
@@ -59,17 +65,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 				contentContainerStyle={styles.outputContent}
 				keyboardShouldPersistTaps="handled"
 			>
-				<Text style={styles.outputText} selectable>
+				<Text style={{...textScaleStyle, color: '#d4d4d4'}} selectable>
 					{displayText}
 				</Text>
 			</ScrollView>
 
 			{/* Input row */}
-			<View style={styles.inputRow}>
+			<View style={inputText ? styles.inputRowActive : styles.inputRow}>
 				<Text style={styles.promptSign}>›</Text>
 				<TextInput
 					ref={inputRef}
-					style={styles.input}
+					style={{...textScaleStyle, color: '#e2e2e2'}}
 					value={inputText}
 					onChangeText={setInputText}
 					onSubmitEditing={sendInput}
@@ -87,7 +93,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 					style={styles.sendButton}
 					activeOpacity={0.7}
 				>
-					<Text style={styles.sendIcon}>↵</Text>
+					<Text style={{...textScaleStyle, color: '#6366f1'}}>↵</Text>
 				</TouchableOpacity>
 			</View>
 		</View>
@@ -109,8 +115,8 @@ const styles = StyleSheet.create({
 	outputText: {
 		color: '#d4d4d4',
 		fontFamily: 'monospace',
-		fontSize: 13,
-		lineHeight: 20,
+		...textScaleStyle, // fontSize and lineHeight
+		marginBottom: 4,
 	},
 	inputRow: {
 		flexDirection: 'row',
@@ -121,9 +127,17 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 8,
 		paddingVertical: 4,
 	},
+	inputRowActive: {
+		backgroundColor: '#1a1a1a',
+		borderTopColor: '#6366f1',
+		flexDirection: 'row',
+		alignItems: 'center',
+		paddingHorizontal: 8,
+		paddingVertical: 4,
+	},
 	promptSign: {
 		color: '#6366f1',
-		fontSize: 18,
+		...textScaleStyle,
 		fontWeight: 'bold',
 		paddingRight: 6,
 	},
@@ -131,7 +145,7 @@ const styles = StyleSheet.create({
 		flex: 1,
 		color: '#e2e2e2',
 		fontFamily: 'monospace',
-		fontSize: 13,
+		...textScaleStyle,
 		paddingVertical: 8,
 	},
 	sendButton: {
@@ -140,7 +154,7 @@ const styles = StyleSheet.create({
 	},
 	sendIcon: {
 		color: '#6366f1',
-		fontSize: 20,
+		...textScaleStyle,
 		fontWeight: 'bold',
 	},
 })

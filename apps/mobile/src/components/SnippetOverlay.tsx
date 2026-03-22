@@ -7,8 +7,12 @@ import {
 	View,
 } from 'react-native'
 import {useSnippetStore} from '../store/useSnippetStore'
+import {scaleText} from 'react-native-text'
 import type {Snippet} from '@shelly/shared'
 import React from 'react'
+
+// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
+const textScaleStyle = scaleText({fontSize: 20})
 
 interface SnippetOverlayProps {
 	isVisible: boolean
@@ -30,12 +34,19 @@ export const SnippetOverlay: React.FC<SnippetOverlayProps> = ({
 
 	return (
 		<Modal visible={isVisible} animationType="slide" transparent>
-			<View className="flex-1 justify-end bg-black/50">
+			<View className="justify-end flex-1 bg-black/50">
 				<SafeAreaView className="bg-zinc-900 rounded-t-2xl max-h-[70%]">
-					<View className="p-4 border-b border-zinc-800 flex-row justify-between items-center">
-						<Text className="text-xl font-bold text-white">Snippets</Text>
+					<View className="flex-row items-center justify-between p-4 border-b border-zinc-800">
+						<Text style={textScaleStyle} className="font-bold text-white">
+							Snippets
+						</Text>
 						<TouchableOpacity onPress={onClose}>
-							<Text className="text-indigo-400 font-medium">Close</Text>
+							<Text
+								style={textScaleStyle}
+								className="font-medium text-indigo-400"
+							>
+								Close
+							</Text>
 						</TouchableOpacity>
 					</View>
 
@@ -47,15 +58,23 @@ export const SnippetOverlay: React.FC<SnippetOverlayProps> = ({
 								onPress={() => handleSelect(item)}
 								className="p-4 border-b border-zinc-800"
 							>
-								<Text className="text-white font-medium">{item.name}</Text>
-								<Text className="text-zinc-500 text-xs mt-1" numberOfLines={1}>
+								<Text style={textScaleStyle} className="font-medium text-white">
+									{item.name}
+								</Text>
+								<Text
+									style={textScaleStyle}
+									className="mt-1 text-xs text-zinc-500"
+									numberOfLines={1}
+								>
 									{item.command}
 								</Text>
 							</TouchableOpacity>
 						)}
 						ListEmptyComponent={
-							<View className="p-8 items-center">
-								<Text className="text-zinc-500">No snippets found</Text>
+							<View className="items-center p-8">
+								<Text style={textScaleStyle} className="text-zinc-500">
+									No snippets found
+								</Text>
 							</View>
 						}
 					/>
