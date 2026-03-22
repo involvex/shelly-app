@@ -1,0 +1,11 @@
+{
+	"name": "@ssh-powershell-shell/shared",
+	"type": "module",
+	"module": "src/index.ts",
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}

@@ -1,0 +1,45 @@
+{
+	"name": "ssh-powershell-shell",
+	"private": true,
+	"funding": {
+		"url": "https://github.com/sponsors/involvex"
+	},
+	"author": "involvex",
+	"type": "module",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"prebuild": "bun run format && bun run lint:fix && bun run typecheck",
+		"build": "bun run build:shared && bun run build:app",
+		"build:app": "bun run -F @ssh-powershell-shell/mobile expo:prebuild",
+		"build:shared": "bun run -F @ssh-powershell-shell/shared build",
+		"format": "prettier . --write",
+		"lint": "eslint .",
+		"lint:fix": "eslint --fix .",
+		"start:app": "bun run -F @ssh-powershell-shell/mobile start",
+		"typecheck": "tsc --noEmit"
+	},
+	"prettier": "@involvex/prettier-config",
+	"dependencies": {
+		"jiti": "^2.6.1"
+	},
+	"devDependencies": {
+		"@eslint/css": "^1.0.0",
+		"@eslint/js": "^10.0.1",
+		"@involvex/prettier-config": "latest",
+		"@types/bun": "latest",
+		"eslint": "^10.1.0",
+		"eslint-plugin-react": "^7.37.5",
+		"globals": "^17.4.0",
+		"prettier": "^3.8.1",
+		"prettier-plugin-organize-imports": "^4.3.0",
+		"prettier-plugin-packagejson": "^3.0.2",
+		"prettier-plugin-sort-imports": "^1.8.11",
+		"typescript-eslint": "^8.57.1"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}

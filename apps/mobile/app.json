@@ -1,0 +1,25 @@
+{
+  "scheme": "ssh-powershell-shell",
+  "userInterfaceStyle": "automatic",
+  "orientation": "default",
+  "owner": "involvex",
+  "version": "0.0.1",
+  "web": {
+    "output": "static"
+  },
+  "plugins": [
+    "expo-router",
+    "@bacons/apple-colors",
+    "expo-web-browser",
+    "expo-secure-store",
+    "expo-font"
+  ],
+  "android": {
+    "package": "com.involvex.sshpowershell",
+    "userInterfaceStyle": "automatic",
+    "versionCode": 1
+  },
+  "description": "A mobile ssh client",
+  "name": "ssh-powershell-shell",
+  "slug": "ssh-powershell-shell"
+}
