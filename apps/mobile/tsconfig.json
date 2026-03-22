@@ -1,17 +1,20 @@
 {
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
-  },
-  "extends": "expo/tsconfig.base",
-  "include": [
-    "global.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    "nativewind-env.d.ts"
-  ]
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@shelly/shared": ["../../packages/shared/src/index.ts"]
+		},
+		"moduleSuffixes": [".native", ".web", ""]
+	},
+	"extends": "expo/tsconfig.base",
+	"include": [
+		"global.d.ts",
+		"**/*.ts",
+		"**/*.tsx",
+		"nativewind-env.d.ts",
+		"babel.config.js",
+		"metro.config.js",
+		"eslint.config.ts"
+	]
 }

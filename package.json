@@ -1,6 +1,10 @@
 {
-	"name": "ssh-powershell-shell",
+	"name": "shelly-app",
+	"version": "",
 	"private": true,
+	"repository": {
+		"url": "git+https://github.com/involvex/shelly-app.git"
+	},
 	"funding": {
 		"url": "https://github.com/sponsors/involvex"
 	},
@@ -13,12 +17,12 @@
 	"scripts": {
 		"prebuild": "bun run format && bun run lint:fix && bun run typecheck",
 		"build": "bun run build:shared && bun run build:app",
-		"build:app": "bun run -F @ssh-powershell-shell/mobile expo:prebuild",
-		"build:shared": "bun run -F @ssh-powershell-shell/shared build",
+		"build:app": "bun run -F @shelly/mobile expo:prebuild",
+		"build:shared": "bun run -F @shelly/shared build",
 		"format": "prettier . --write",
 		"lint": "eslint .",
 		"lint:fix": "eslint --fix .",
-		"start:app": "bun run -F @ssh-powershell-shell/mobile start",
+		"start:app": "bun run -F @shelly/mobile start",
 		"typecheck": "tsc --noEmit"
 	},
 	"prettier": "@involvex/prettier-config",

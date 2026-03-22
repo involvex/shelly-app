@@ -24,6 +24,12 @@
 		// Some stricter flags (disabled by default)
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false
+		"noPropertyAccessFromIndexSignature": false,
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["apps/mobile/src/*"],
+			"@shelly/shared": ["packages/shared/src/index.ts"],
+			"@shelly/mobile/*": ["apps/mobile/src/*"]
+		}
 	}
 }

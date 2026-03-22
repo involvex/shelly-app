@@ -21,4 +21,6 @@ packages/templates/templates
 agents
 docs/skills
 
-apps/mobile
+apps/node_modules
+apps/mobile/node_modules
+apps/mobile/.expo

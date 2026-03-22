@@ -50,6 +50,10 @@ export default defineConfig([
 		extends: ['js/recommended'],
 		languageOptions: {
 			globals: {...globals.browser, ...globals.node},
+			parserOptions: {
+				projectService: true,
+				tsconfigRootDir: import.meta.dirname,
+			},
 		},
 	},
 	...(Array.isArray(reactConfig)
