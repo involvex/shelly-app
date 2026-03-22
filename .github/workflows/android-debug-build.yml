@@ -223,6 +223,24 @@ jobs:
         run: bun install --frozen-lockfile
 
       # ─────────────────────────────────────────────────────────────────────
+      # STEP 5b — APPLY NODE_MODULES PATCHES
+      # ─────────────────────────────────────────────────────────────────────
+      # patch-package applies unified diffs from apps/mobile/patches/ to the
+      # installed node_modules. The critical patch here replaces the deprecated
+      # jcenter() repository with mavenCentral() in the
+      # @dylankenneally/react-native-ssh-sftp android/build.gradle file.
+      # jcenter() was shut down and removed from Gradle 9, causing the build
+      # to fail with "Could not find method jcenter()".
+      #
+      # NOTE: Bun does not execute workspace-package lifecycle scripts when
+      # `bun install` runs at the monorepo root, so the postinstall hook in
+      # apps/mobile/package.json does not fire in CI. This explicit step
+      # guarantees the patch is applied before Gradle processes any build files.
+      - name: Apply node_modules patches
+        working-directory: apps/mobile
+        run: bunx patch-package
+
+      # ─────────────────────────────────────────────────────────────────────
       # STEP 6 — VALIDATE ANDROID SDK ENVIRONMENT
       # ─────────────────────────────────────────────────────────────────────
       # ubuntu-latest ships with the Android SDK pre-installed. This step

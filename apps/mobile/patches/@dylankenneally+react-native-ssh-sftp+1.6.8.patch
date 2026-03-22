@@ -1,0 +1,20 @@
+diff --git a/node_modules/@dylankenneally/react-native-ssh-sftp/android/build.gradle b/node_modules/@dylankenneally/react-native-ssh-sftp/android/build.gradle
+--- a/node_modules/@dylankenneally/react-native-ssh-sftp/android/build.gradle
++++ b/node_modules/@dylankenneally/react-native-ssh-sftp/android/build.gradle
+@@ -2,7 +2,7 @@
+ buildscript {
+     repositories {
+-        jcenter()
+         google()
++        mavenCentral()
+     }
+ 
+     dependencies {
+@@ -29,7 +29,6 @@
+ 
+ repositories {
+     mavenCentral()
+-    jcenter()
+ }
+ 
+ dependencies {

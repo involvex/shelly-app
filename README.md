@@ -5,6 +5,8 @@
 ![Bun](https://img.shields.io/badge/Bun-1.2-fbf0df?style=flat-square&logo=bun)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
+[![Build Android Debug APK](https://github.com/involvex/shelly-app/actions/workflows/android-debug-build.yml/badge.svg)](https://github.com/involvex/shelly-app/actions/workflows/android-debug-build.yml)
+
 Shelly is a robust, seamless SSH client specifically designed for Android and optimized for Windows PowerShell environments. It combines the power of `xterm.js` with the flexibility of React Native to provide a professional terminal experience on the go.
 
 ## 🌟 Key Features

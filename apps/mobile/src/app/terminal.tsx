@@ -1,13 +1,7 @@
-import {
-	SafeAreaView,
-	ScrollView,
-	Text,
-	TextInput,
-	TouchableOpacity,
-	View,
-} from 'react-native'
+import {ScrollView, Text, TextInput, TouchableOpacity, View} from 'react-native'
 import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
+import {SafeAreaView} from 'react-native-safe-area-context'
 import {SnippetOverlay} from '../components/SnippetOverlay'
 import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
