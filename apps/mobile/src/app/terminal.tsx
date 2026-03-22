@@ -1,10 +1,20 @@
-import {ScrollView, Text, TextInput, TouchableOpacity, View} from 'react-native'
+import {
+	Alert,
+	Modal,
+	ScrollView,
+	Text,
+	TextInput,
+	TouchableOpacity,
+	View,
+} from 'react-native'
 import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
 import {SafeAreaView} from 'react-native-safe-area-context'
 import {SnippetOverlay} from '../components/SnippetOverlay'
 import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
+import {useSSHProfiles} from '../store/useSSHProfiles'
+import {useSSHSettings} from '../hooks/useSSHSettings'
 import {useSSHStore} from '../store/useSSHStore'
 import {useEffect, useState} from 'react'
 
@@ -13,26 +23,73 @@ export default function TerminalScreen() {
 		useSSHStore()
 	const {loadSnippets} = useSnippetStore()
 	const {hosts, isScanning, startScan} = useDiscoveryStore()
+	const {settings, updateSetting, save, loaded} = useSSHSettings()
+	const {
+		profiles,
+		loaded: profilesLoaded,
+		load: loadProfiles,
+		add: addProfile,
+		remove: removeProfile,
+		getPassword,
+	} = useSSHProfiles()
 
-	const [host, setHost] = useState('192.168.1.100')
-	const [user, setUser] = useState('Administrator')
-	const [password, setPassword] = useState('')
 	const [isSnippetsVisible, setSnippetsVisible] = useState(false)
+	const [showSaveProfile, setShowSaveProfile] = useState(false)
+	const [profileName, setProfileName] = useState('')
 
 	useEffect(() => {
 		loadSnippets()
 		startScan()
+		loadProfiles()
 	}, [])
 
 	const isConnected = service.isConnected()
 
-	const handleConnect = () => {
+	const handleConnect = async () => {
+		const port = parseInt(settings.port, 10) || 22
+		await save(settings)
 		connect({
-			host,
-			port: 22,
-			user,
-			auth: {type: 'password', value: password},
+			host: settings.host,
+			port,
+			user: settings.user,
+			auth: {type: 'password', value: settings.password},
 		})
+	}
+
+	const handleSelectProfile = async (id: string) => {
+		const p = profiles.find(x => x.id === id)
+		if (!p) return
+		const pw = await getPassword(id)
+		updateSetting('host', p.host)
+		updateSetting('port', p.port)
+		updateSetting('user', p.user)
+		updateSetting('password', pw)
+	}
+
+	const handleSaveProfile = async () => {
+		if (!profileName.trim()) return
+		await addProfile(
+			{
+				name: profileName.trim(),
+				host: settings.host,
+				port: settings.port,
+				user: settings.user,
+			},
+			settings.password,
+		)
+		setProfileName('')
+		setShowSaveProfile(false)
+	}
+
+	const handleDeleteProfile = (id: string, name: string) => {
+		Alert.alert('Delete profile', `Remove "${name}"?`, [
+			{text: 'Cancel', style: 'cancel'},
+			{
+				text: 'Delete',
+				style: 'destructive',
+				onPress: () => removeProfile(id),
+			},
+		])
 	}
 
 	if (!isConnected) {
@@ -40,46 +97,93 @@ export default function TerminalScreen() {
 			<SafeAreaView className="flex-1 bg-zinc-950 p-4">
 				<ScrollView
 					className="flex-1"
-					contentContainerStyle={{
-						justifyContent: 'center',
-						paddingVertical: 40,
-					}}
+					keyboardShouldPersistTaps="handled"
+					contentContainerStyle={{paddingVertical: 40}}
 				>
 					<View className="items-center mb-6">
 						<Text className="text-4xl">🐚</Text>
 						<Text className="text-3xl font-bold text-white mt-2">Shelly</Text>
 					</View>
 
+					{/* Saved profiles */}
+					{profilesLoaded && profiles.length > 0 && (
+						<View className="mb-5">
+							<Text className="text-zinc-400 font-bold uppercase tracking-wider text-xs mb-2">
+								Saved Profiles
+							</Text>
+							{profiles.map(p => (
+								<View
+									key={p.id}
+									className="flex-row items-center bg-zinc-900 border border-zinc-800 rounded-md mb-2 overflow-hidden"
+								>
+									<TouchableOpacity
+										className="flex-1 p-3"
+										onPress={() => handleSelectProfile(p.id)}
+									>
+										<Text className="text-white font-medium">{p.name}</Text>
+										<Text className="text-zinc-500 text-xs mt-0.5">
+											{p.user}@{p.host}:{p.port}
+										</Text>
+									</TouchableOpacity>
+									<TouchableOpacity
+										className="px-3 py-3"
+										onPress={() => handleDeleteProfile(p.id, p.name)}
+									>
+										<Text className="text-zinc-600 text-lg">✕</Text>
+									</TouchableOpacity>
+								</View>
+							))}
+						</View>
+					)}
+
 					<View className="space-y-4">
-						<View className="space-y-2">
-							<Text className="text-zinc-400 text-sm">Host</Text>
-							<TextInput
-								value={host}
-								onChangeText={setHost}
-								placeholder="e.g. 192.168.1.100"
-								placeholderTextColor="#555"
-								className="bg-zinc-900 text-white p-3 rounded-md border border-zinc-800"
-							/>
+						{/* Host + Port row */}
+						<View className="flex-row gap-2">
+							<View className="flex-1 space-y-1">
+								<Text className="text-zinc-400 text-sm">Host</Text>
+								<TextInput
+									value={settings.host}
+									onChangeText={v => updateSetting('host', v)}
+									placeholder="192.168.1.100"
+									placeholderTextColor="#555"
+									autoCapitalize="none"
+									autoCorrect={false}
+									className="bg-zinc-900 text-white p-3 rounded-md border border-zinc-800"
+								/>
+							</View>
+							<View className="w-20 space-y-1">
+								<Text className="text-zinc-400 text-sm">Port</Text>
+								<TextInput
+									value={settings.port}
+									onChangeText={v => updateSetting('port', v)}
+									placeholder="22"
+									placeholderTextColor="#555"
+									keyboardType="number-pad"
+									className="bg-zinc-900 text-white p-3 rounded-md border border-zinc-800"
+								/>
+							</View>
 						</View>
 
-						<View className="space-y-2">
+						<View className="space-y-1">
 							<Text className="text-zinc-400 text-sm">Username</Text>
 							<TextInput
-								value={user}
-								onChangeText={setUser}
+								value={settings.user}
+								onChangeText={v => updateSetting('user', v)}
 								placeholder="Administrator"
 								placeholderTextColor="#555"
+								autoCapitalize="none"
+								autoCorrect={false}
 								className="bg-zinc-900 text-white p-3 rounded-md border border-zinc-800"
 							/>
 						</View>
 
-						<View className="space-y-2">
+						<View className="space-y-1">
 							<Text className="text-zinc-400 text-sm">Password</Text>
 							<TextInput
-								value={password}
-								onChangeText={setPassword}
+								value={settings.password}
+								onChangeText={v => updateSetting('password', v)}
 								secureTextEntry
-								placeholder="********"
+								placeholder="••••••••"
 								placeholderTextColor="#555"
 								className="bg-zinc-900 text-white p-3 rounded-md border border-zinc-800"
 							/>
@@ -89,30 +193,35 @@ export default function TerminalScreen() {
 
 						<TouchableOpacity
 							onPress={handleConnect}
-							disabled={isConnecting}
-							className={`p-4 rounded-md items-center ${isConnecting ? 'bg-zinc-700' : 'bg-indigo-600'}`}
+							disabled={isConnecting || !loaded}
+							className={`p-4 rounded-md items-center ${isConnecting || !loaded ? 'bg-zinc-700' : 'bg-indigo-600'}`}
 						>
 							<Text className="text-white font-bold text-lg">
-								{isConnecting ? 'Connecting...' : 'Connect'}
+								{isConnecting ? 'Connecting…' : 'Connect'}
 							</Text>
 						</TouchableOpacity>
 
+						<TouchableOpacity
+							onPress={() => setShowSaveProfile(true)}
+							className="p-3 rounded-md items-center border border-zinc-700"
+						>
+							<Text className="text-zinc-400 text-sm">Save as Profile</Text>
+						</TouchableOpacity>
+
 						{/* Local Discovery */}
-						<View className="mt-8">
+						<View className="mt-6">
 							<View className="flex-row justify-between items-center mb-3">
 								<Text className="text-zinc-400 font-bold uppercase tracking-wider text-xs">
 									Local Devices
 								</Text>
 								{isScanning && (
-									<Text className="text-zinc-600 text-[10px] animate-pulse">
-										Scanning...
-									</Text>
+									<Text className="text-zinc-600 text-[10px]">Scanning…</Text>
 								)}
 							</View>
 							{hosts.map(d => (
 								<TouchableOpacity
 									key={d.host}
-									onPress={() => setHost(d.host)}
+									onPress={() => updateSetting('host', d.host)}
 									className="bg-zinc-900/50 p-3 rounded-md border border-zinc-800/50 mb-2 flex-row justify-between"
 								>
 									<Text className="text-zinc-200">{d.name}</Text>
@@ -121,12 +230,50 @@ export default function TerminalScreen() {
 							))}
 							{!isScanning && hosts.length === 0 && (
 								<Text className="text-zinc-600 text-xs italic">
-									No devices found. Ensure host has SSH enabled.
+									No devices found. Ensure SSH is enabled on the host.
 								</Text>
 							)}
 						</View>
 					</View>
 				</ScrollView>
+
+				{/* Save profile modal */}
+				<Modal
+					visible={showSaveProfile}
+					transparent
+					animationType="fade"
+					onRequestClose={() => setShowSaveProfile(false)}
+				>
+					<View className="flex-1 justify-center bg-black/70 px-6">
+						<View className="bg-zinc-900 rounded-xl p-5 border border-zinc-700">
+							<Text className="text-white font-bold text-lg mb-4">
+								Save Profile
+							</Text>
+							<Text className="text-zinc-400 text-sm mb-1">Profile name</Text>
+							<TextInput
+								value={profileName}
+								onChangeText={setProfileName}
+								placeholder="e.g. Home Server"
+								placeholderTextColor="#555"
+								className="bg-zinc-800 text-white p-3 rounded-md border border-zinc-700 mb-4"
+							/>
+							<View className="flex-row gap-3">
+								<TouchableOpacity
+									onPress={() => setShowSaveProfile(false)}
+									className="flex-1 p-3 rounded-md border border-zinc-700 items-center"
+								>
+									<Text className="text-zinc-400">Cancel</Text>
+								</TouchableOpacity>
+								<TouchableOpacity
+									onPress={handleSaveProfile}
+									className="flex-1 p-3 rounded-md bg-indigo-600 items-center"
+								>
+									<Text className="text-white font-bold">Save</Text>
+								</TouchableOpacity>
+							</View>
+						</View>
+					</View>
+				</Modal>
 			</SafeAreaView>
 		)
 	}
@@ -135,7 +282,7 @@ export default function TerminalScreen() {
 		<SafeAreaView className="flex-1 bg-black">
 			<View className="flex-row items-center justify-between p-2 border-b border-zinc-800 bg-zinc-900">
 				<Text className="text-zinc-400 font-medium text-xs">
-					{user}@{host}
+					{settings.user}@{settings.host}
 				</Text>
 				<View className="flex-row gap-2">
 					<TouchableOpacity

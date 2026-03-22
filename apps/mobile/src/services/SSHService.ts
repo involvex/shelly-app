@@ -1,8 +1,14 @@
 import SSHClient, {PtyType} from '@dylankenneally/react-native-ssh-sftp'
 import type {ISSHService, SSHConfig} from '@shelly/shared'
+import {NativeModules} from 'react-native'
 
 type DataCallback = (data: string) => void
 type ErrorCallback = (error: Error) => void
+
+/** Returns true when the SSH native module is linked and available. */
+export function isSSHNativeAvailable(): boolean {
+	return !!NativeModules.RNSSHClient
+}
 
 export class SSHService implements ISSHService {
 	private client: SSHClient | null = null
@@ -15,6 +21,14 @@ export class SSHService implements ISSHService {
 	}
 
 	async connect(config: SSHConfig): Promise<void> {
+		if (!NativeModules.RNSSHClient) {
+			throw new Error(
+				'SSH native module unavailable.\n' +
+					'Expo Go does not support custom native modules.\n' +
+					'Build a development client: expo run:android',
+			)
+		}
+
 		if (this._isConnected) {
 			throw new Error('Already connected')
 		}
@@ -38,8 +52,12 @@ export class SSHService implements ISSHService {
 			}
 
 			// Register shell output listener before starting the shell
-			this.client.on('Shell', (event: {value: string}) => {
-				this.emitData(event.value)
+			this.client.on('Shell', (event: {value: string} | string) => {
+				const data =
+					typeof event === 'string' ? event : (event as {value: string})?.value
+				if (data != null && data !== '') {
+					this.emitData(data)
+				}
 			})
 
 			await this.client.startShell(PtyType.XTERM)

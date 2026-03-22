@@ -1,6 +1,6 @@
+import {SSHService, isSSHNativeAvailable} from '../services/SSHService'
 import type {ISSHService, SSHConfig} from '@shelly/shared'
 import {MockSSHService} from '../services/MockSSHService'
-import {SSHService} from '../services/SSHService'
 import {Platform} from 'react-native'
 import {create} from 'zustand'
 
@@ -18,16 +18,22 @@ interface SSHState {
 }
 
 function createService(): ISSHService {
-	// Use real SSH service on native; fall back to mock on web
-	return Platform.OS === 'web' ? new MockSSHService() : new SSHService()
+	// Use real SSH service only when the native module is linked (dev/release build).
+	// Falls back to mock in Expo Go (native module not available) and on web.
+	if (Platform.OS !== 'web' && isSSHNativeAvailable()) {
+		return new SSHService()
+	}
+	return new MockSSHService()
 }
 
 export const useSSHStore = create<SSHState>(set => {
 	const service = createService()
 
-	// Setup listeners
+	// Setup listeners — guard against null/undefined from the native layer
 	service.onData(data => {
-		set(state => ({output: state.output + data}))
+		if (data != null && data !== '') {
+			set(state => ({output: state.output + data}))
+		}
 	})
 
 	service.onError(err => {
