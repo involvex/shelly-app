@@ -46,9 +46,9 @@ function withOpacityRgb(rgb: string, opacity: number): string {
 		throw new Error('Invalid RGB color format')
 	}
 
-	const r = parseInt(match[1], 10)
-	const g = parseInt(match[2], 10)
-	const b = parseInt(match[3], 10)
+	const r = parseInt(match[1]!, 10)
+	const g = parseInt(match[2]!, 10)
+	const b = parseInt(match[3]!, 10)
 
 	return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
@@ -60,9 +60,9 @@ function withOpacityRgba(rgba: string, opacity: number): string {
 		throw new Error('Invalid RGBA color format')
 	}
 
-	const r = parseInt(match[1], 10)
-	const g = parseInt(match[2], 10)
-	const b = parseInt(match[3], 10)
+	const r = parseInt(match[1]!, 10)
+	const g = parseInt(match[2]!, 10)
+	const b = parseInt(match[3]!, 10)
 
 	return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }

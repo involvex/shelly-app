@@ -1,30 +1,32 @@
 import {
 	Alert,
-	Modal,
+	Keyboard,
+	Platform,
 	ScrollView,
+	StyleSheet,
 	Text,
 	TextInput,
 	TouchableOpacity,
 	View,
-	Platform,
 } from 'react-native'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context'
+import {SnippetManagerModal} from '../components/SnippetManagerModal'
+import {ProfileFormModal} from '../components/ProfileFormModal'
 import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
-import {SafeAreaView} from 'react-native-safe-area-context'
-import {SnippetOverlay} from '../components/SnippetOverlay'
 import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
+import type {SSHProfile} from '../store/useSSHProfiles'
 import {useSSHProfiles} from '../store/useSSHProfiles'
 import {useSSHSettings} from '../hooks/useSSHSettings'
-// import { Icon } from '@/components/Icon';
-import {useColorScheme} from '@/lib/useColorScheme'
+import {useColorScheme} from '../lib/useColorScheme'
+import {useEffect, useRef, useState} from 'react'
 import {useSSHStore} from '../store/useSSHStore'
 import {scaleText} from 'react-native-text'
 import {StatusBar} from 'expo-status-bar'
-import {useEffect, useState} from 'react'
 
-// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
-const textScaleStyle = scaleText({fontSize: 20})
+const ts = scaleText({fontSize: 14})
 
 export default function TerminalScreen() {
 	const {output, isConnecting, error, connect, sendData, service, disconnect} =
@@ -37,15 +39,38 @@ export default function TerminalScreen() {
 		loaded: profilesLoaded,
 		load: loadProfiles,
 		add: addProfile,
+		update: updateProfile,
 		remove: removeProfile,
 		getPassword,
 	} = useSSHProfiles()
 
-	const [isSnippetsVisible, setSnippetsVisible] = useState(false)
-	const [showSaveProfile, setShowSaveProfile] = useState(false)
-	const [profileName, setProfileName] = useState('')
-
 	const {colors, colorScheme} = useColorScheme()
+
+	const [isSnippetsVisible, setSnippetsVisible] = useState(false)
+	const [profileFormVisible, setProfileFormVisible] = useState(false)
+	const [editingProfile, setEditingProfile] = useState<SSHProfile | undefined>()
+	const [editingPassword, setEditingPassword] = useState('')
+
+	/**
+	 * After connecting, we send this startup command (if any) once with a short
+	 * delay to let the remote shell initialize first.
+	 */
+	const startupCommandRef = useRef<string | null>(null)
+	const prevConnectedRef = useRef(false)
+
+	const isConnected = service.isConnected()
+
+	// Trigger startup command when connection becomes active.
+	useEffect(() => {
+		if (isConnected && !prevConnectedRef.current) {
+			const cmd = startupCommandRef.current
+			if (cmd?.trim()) {
+				setTimeout(() => sendData(cmd.trim() + '\r'), 500)
+			}
+			startupCommandRef.current = null
+		}
+		prevConnectedRef.current = isConnected
+	}, [isConnected, sendData])
 
 	useEffect(() => {
 		loadSnippets()
@@ -53,7 +78,37 @@ export default function TerminalScreen() {
 		loadProfiles()
 	}, [])
 
-	const isConnected = service.isConnected()
+	// ─── Keyboard height tracking ──────────────────────────────────────────────
+	// Directly listening to Keyboard events is more reliable than
+	// KeyboardAvoidingView, especially on Android where behavior='height'
+	// can fail when the parent layout uses flex sizing.
+	// On iOS, keyboardWillShow fires before the animation, giving a smooth lift.
+	// The reported height already includes the home-indicator safe area, so we
+	// only apply the raw safe-area bottom when the keyboard is hidden.
+	const {bottom: safeAreaBottom} = useSafeAreaInsets()
+	const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+	useEffect(() => {
+		const showEvent =
+			Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+		const hideEvent =
+			Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+		const onShow = (e: {endCoordinates: {height: number}}) =>
+			setKeyboardHeight(e.endCoordinates.height)
+		const onHide = () => setKeyboardHeight(0)
+		const sub1 = Keyboard.addListener(showEvent, onShow)
+		const sub2 = Keyboard.addListener(hideEvent, onHide)
+		return () => {
+			sub1.remove()
+			sub2.remove()
+		}
+	}, [])
+
+	// When the keyboard is visible its height already covers the home indicator,
+	// so we can switch cleanly between the two values.
+	const bottomPadding = keyboardHeight > 0 ? keyboardHeight : safeAreaBottom
+
+	// ─── Handlers ──────────────────────────────────────────────────────────────
 
 	const handleConnect = async () => {
 		const port = parseInt(settings.port, 10) || 22
@@ -74,39 +129,52 @@ export default function TerminalScreen() {
 		updateSetting('port', p.port)
 		updateSetting('user', p.user)
 		updateSetting('password', pw)
+		// Stash the startup command to send after connecting.
+		startupCommandRef.current = p.startupCommand ?? null
 	}
 
-	const handleSaveProfile = async () => {
-		if (!profileName.trim()) return
-		await addProfile(
-			{
-				name: profileName.trim(),
-				host: settings.host,
-				port: settings.port,
-				user: settings.user,
-			},
-			settings.password,
-		)
-		setProfileName('')
-		setShowSaveProfile(false)
+	const handleOpenAddProfile = () => {
+		setEditingProfile(undefined)
+		setEditingPassword('')
+		setProfileFormVisible(true)
+	}
+
+	const handleOpenEditProfile = async (profile: SSHProfile) => {
+		const pw = await getPassword(profile.id)
+		setEditingProfile(profile)
+		setEditingPassword(pw)
+		setProfileFormVisible(true)
+	}
+
+	const handleSaveProfile = async (
+		profile: Omit<SSHProfile, 'id'>,
+		password: string,
+	) => {
+		if (editingProfile) {
+			await updateProfile(editingProfile.id, profile, password)
+		} else {
+			await addProfile(profile, password)
+		}
 	}
 
 	const handleDeleteProfile = (id: string, name: string) => {
 		Alert.alert('Delete profile', `Remove "${name}"?`, [
 			{text: 'Cancel', style: 'cancel'},
-			{
-				text: 'Delete',
-				style: 'destructive',
-				onPress: () => removeProfile(id),
-			},
+			{text: 'Delete', style: 'destructive', onPress: () => removeProfile(id)},
 		])
 	}
+
+	const handleSnippetSelect = (command: string) => {
+		// Append CR so the command runs immediately in the terminal.
+		sendData(command + '\r')
+	}
+
+	// ─── Connection screen ─────────────────────────────────────────────────────
 
 	if (!isConnected) {
 		return (
 			<SafeAreaView
-				className="flex-1 p-4"
-				style={{backgroundColor: colors.background}}
+				style={[styles.screen, {backgroundColor: colors.background}]}
 			>
 				<StatusBar
 					style={
@@ -117,74 +185,118 @@ export default function TerminalScreen() {
 								: 'dark'
 					}
 				/>
+
 				<ScrollView
-					className="flex-1"
+					style={styles.scroll}
+					contentContainerStyle={styles.scrollContent}
 					keyboardShouldPersistTaps="handled"
-					contentContainerStyle={{paddingVertical: 40}}
 				>
-					<View className="items-center mb-6">
-						<Text style={textScaleStyle}>🐚</Text>
-						<Text style={textScaleStyle}>Shelly</Text>
+					{/* ── App Header ── */}
+					<View style={styles.appHeader}>
+						<Text style={styles.appIcon}>🐚</Text>
+						<Text style={[ts, styles.appTitle]}>Shelly</Text>
+						<Text style={[ts, styles.appSubtitle]}>SSH Client</Text>
 					</View>
 
-					{/* Saved profiles */}
-					{profilesLoaded && profiles.length > 0 && (
-						<View className="mb-5">
-							<Text
-								className="mb-2 text-xs font-bold tracking-wider uppercase"
-								style={[textScaleStyle, {color: colors.primary}]}
-							>
-								Saved Profiles
-							</Text>
-							{profiles.map(p => (
-								<View
-									key={p.id}
-									className="flex-row items-center mb-2 overflow-hidden border rounded-md"
-									style={{
-										backgroundColor: colors.card,
-										borderColor: colors.border,
-									}}
+					{/* ── Saved profiles ── */}
+					{profilesLoaded && (
+						<View style={styles.section}>
+							<View style={styles.sectionHeader}>
+								<Text style={[ts, styles.sectionLabel]}>Saved Profiles</Text>
+								<TouchableOpacity
+									onPress={handleOpenAddProfile}
+									style={styles.addProfileBtn}
+									accessibilityRole="button"
+									accessibilityLabel="Add new profile"
 								>
-									<TouchableOpacity
-										className="flex-1 p-3"
-										onPress={() => handleSelectProfile(p.id)}
+									<MaterialCommunityIcons
+										name="plus"
+										size={16}
+										color="#6366f1"
+									/>
+									<Text style={[ts, styles.addProfileLabel]}>New</Text>
+								</TouchableOpacity>
+							</View>
+
+							{profiles.length === 0 ? (
+								<Text style={[ts, styles.noProfilesHint]}>
+									No profiles yet — tap "New" to save a connection
+								</Text>
+							) : (
+								profiles.map(p => (
+									<View
+										key={p.id}
+										style={[
+											styles.profileCard,
+											{
+												// Colored left border using the profile's accent color.
+												borderLeftColor: p.color ?? '#6366f1',
+												backgroundColor: colors.card,
+												borderColor: colors.border,
+											},
+										]}
 									>
-										<Text
-											className="font-medium"
-											style={[textScaleStyle, {color: colors.text}]}
+										{/* Main tap area — loads the profile into the form */}
+										<TouchableOpacity
+											style={styles.profileCardInfo}
+											onPress={() => handleSelectProfile(p.id)}
+											accessibilityRole="button"
+											accessibilityLabel={`Use profile ${p.name}`}
 										>
-											{p.name}
-										</Text>
-										<Text
-											className="text-zinc-500 text-xs mt-0.5"
-											style={textScaleStyle}
-										>
-											{p.user}@{p.host}:{p.port}
-										</Text>
-									</TouchableOpacity>
-									<TouchableOpacity
-										className="px-3 py-3"
-										onPress={() => handleDeleteProfile(p.id, p.name)}
-									>
-										<Text
-											className="text-lg text-zinc-600"
-											style={textScaleStyle}
-										>
-											✕
-										</Text>
-									</TouchableOpacity>
-								</View>
-							))}
+											<Text style={[ts, styles.profileName]}>{p.name}</Text>
+											{p.description != null && p.description !== '' && (
+												<Text style={[ts, styles.profileDesc]}>
+													{p.description}
+												</Text>
+											)}
+											<Text style={[ts, styles.profileHost]}>
+												{p.user}@{p.host}:{p.port}
+											</Text>
+										</TouchableOpacity>
+
+										{/* Edit + Delete actions */}
+										<View style={styles.profileCardActions}>
+											<TouchableOpacity
+												onPress={() => handleOpenEditProfile(p)}
+												style={styles.profileActionBtn}
+												hitSlop={{top: 8, bottom: 8, left: 6, right: 6}}
+												accessibilityRole="button"
+												accessibilityLabel={`Edit profile ${p.name}`}
+											>
+												<MaterialCommunityIcons
+													name="pencil-outline"
+													size={17}
+													color="#6b7280"
+												/>
+											</TouchableOpacity>
+											<TouchableOpacity
+												onPress={() => handleDeleteProfile(p.id, p.name)}
+												style={styles.profileActionBtn}
+												hitSlop={{top: 8, bottom: 8, left: 6, right: 6}}
+												accessibilityRole="button"
+												accessibilityLabel={`Delete profile ${p.name}`}
+											>
+												<MaterialCommunityIcons
+													name="delete-outline"
+													size={17}
+													color="#6b7280"
+												/>
+											</TouchableOpacity>
+										</View>
+									</View>
+								))
+							)}
 						</View>
 					)}
 
-					<View className="space-y-4">
-						{/* Host + Port row */}
-						<View className="flex-row gap-2">
-							<View className="flex-1 space-y-1">
-								<Text className="text-sm text-zinc-400" style={textScaleStyle}>
-									Host
-								</Text>
+					{/* ── Quick-connect form ── */}
+					<View style={styles.section}>
+						<Text style={[ts, styles.sectionLabel]}>Quick Connect</Text>
+
+						{/* Host + Port */}
+						<View style={styles.formRow}>
+							<View style={styles.formFieldFlex}>
+								<Text style={[ts, styles.fieldLabel]}>Host</Text>
 								<TextInput
 									value={settings.host}
 									onChangeText={v => updateSetting('host', v)}
@@ -192,218 +304,352 @@ export default function TerminalScreen() {
 									placeholderTextColor="#555"
 									autoCapitalize="none"
 									autoCorrect={false}
-									className="p-3 text-white border rounded-md bg-zinc-900 border-zinc-800"
+									style={[ts, styles.input]}
+									accessibilityLabel="SSH host"
 								/>
 							</View>
-							<View className="w-20 space-y-1">
-								<Text className="text-sm text-zinc-400" style={textScaleStyle}>
-									Port
-								</Text>
+							<View style={styles.formFieldPort}>
+								<Text style={[ts, styles.fieldLabel]}>Port</Text>
 								<TextInput
 									value={settings.port}
 									onChangeText={v => updateSetting('port', v)}
 									placeholder="22"
 									placeholderTextColor="#555"
 									keyboardType="number-pad"
-									className="p-3 text-white border rounded-md bg-zinc-900 border-zinc-800"
+									style={[ts, styles.input]}
+									accessibilityLabel="SSH port"
 								/>
 							</View>
 						</View>
 
-						<View className="space-y-1">
-							<Text className="text-sm text-zinc-400" style={textScaleStyle}>
-								Username
-							</Text>
-							<TextInput
-								value={settings.user}
-								onChangeText={v => updateSetting('user', v)}
-								placeholder="Administrator"
-								placeholderTextColor="#555"
-								autoCapitalize="none"
-								autoCorrect={false}
-								className="p-3 text-white border rounded-md bg-zinc-900 border-zinc-800"
-							/>
-						</View>
+						<Text style={[ts, styles.fieldLabel]}>Username</Text>
+						<TextInput
+							value={settings.user}
+							onChangeText={v => updateSetting('user', v)}
+							placeholder="Administrator"
+							placeholderTextColor="#555"
+							autoCapitalize="none"
+							autoCorrect={false}
+							style={[ts, styles.input]}
+							accessibilityLabel="SSH username"
+						/>
 
-						<View className="space-y-1">
-							<Text className="text-sm text-zinc-400" style={textScaleStyle}>
-								Password
-							</Text>
-							<TextInput
-								value={settings.password}
-								onChangeText={v => updateSetting('password', v)}
-								secureTextEntry
-								placeholder="••••••••"
-								placeholderTextColor="#555"
-								className="p-3 text-white border rounded-md bg-zinc-900 border-zinc-800"
-							/>
-						</View>
+						<Text style={[ts, styles.fieldLabel]}>Password</Text>
+						<TextInput
+							value={settings.password}
+							onChangeText={v => updateSetting('password', v)}
+							secureTextEntry
+							placeholder="••••••••"
+							placeholderTextColor="#555"
+							style={[ts, styles.input]}
+							accessibilityLabel="SSH password"
+						/>
 
-						{error && (
-							<Text className="text-sm text-red-500" style={textScaleStyle}>
-								{error}
-							</Text>
+						{error != null && error !== '' && (
+							<Text style={[ts, styles.errorText]}>{error}</Text>
 						)}
 
 						<TouchableOpacity
 							onPress={handleConnect}
 							disabled={isConnecting || !loaded}
-							className={`p-4 rounded-md items-center ${isConnecting || !loaded ? 'bg-zinc-700' : 'bg-indigo-600'}`}
+							style={[
+								styles.connectBtn,
+								(isConnecting || !loaded) && styles.connectBtnDisabled,
+							]}
+							accessibilityRole="button"
+							accessibilityLabel={isConnecting ? 'Connecting' : 'Connect'}
 						>
-							<Text
-								className="text-lg font-bold text-white"
-								style={textScaleStyle}
-							>
+							<MaterialCommunityIcons
+								name={isConnecting ? 'loading' : 'ssh'}
+								size={18}
+								color="#fff"
+							/>
+							<Text style={[ts, styles.connectBtnLabel]}>
 								{isConnecting ? 'Connecting…' : 'Connect'}
 							</Text>
 						</TouchableOpacity>
 
 						<TouchableOpacity
-							onPress={() => setShowSaveProfile(true)}
-							className="items-center p-3 border rounded-md border-zinc-700"
+							onPress={handleOpenAddProfile}
+							style={styles.saveProfileBtn}
+							accessibilityRole="button"
 						>
-							<Text className="text-sm text-zinc-400" style={textScaleStyle}>
-								Save as Profile
-							</Text>
+							<MaterialCommunityIcons
+								name="content-save-outline"
+								size={15}
+								color="#71717a"
+							/>
+							<Text style={[ts, styles.saveProfileLabel]}>Save as Profile</Text>
 						</TouchableOpacity>
+					</View>
 
-						{/* Local Discovery */}
-						<View className="mt-6">
-							<View className="flex-row items-center justify-between mb-3">
-								<Text
-									className="text-xs font-bold tracking-wider uppercase text-zinc-400"
-									style={textScaleStyle}
-								>
-									Local Devices
-								</Text>
-								{isScanning && (
-									<Text
-										className="text-zinc-600 text-[10px]"
-										style={textScaleStyle}
-									>
-										Scanning…
-									</Text>
-								)}
-							</View>
-							{hosts.map(d => (
-								<TouchableOpacity
-									key={d.host}
-									onPress={() => updateSetting('host', d.host)}
-									className="flex-row justify-between p-3 mb-2 border rounded-md bg-zinc-900/50 border-zinc-800/50"
-								>
-									<Text className="text-zinc-200" style={textScaleStyle}>
-										{d.name}
-									</Text>
-									<Text className="text-zinc-500" style={textScaleStyle}>
-										{d.host}
-									</Text>
-								</TouchableOpacity>
-							))}
-							{!isScanning && hosts.length === 0 && (
-								<Text
-									className="text-xs italic text-zinc-600"
-									style={textScaleStyle}
-								>
-									No devices found. Ensure SSH is enabled on the host.
-								</Text>
+					{/* ── Local Discovery ── */}
+					<View style={styles.section}>
+						<View style={styles.sectionHeader}>
+							<Text style={[ts, styles.sectionLabel]}>Local Devices</Text>
+							{isScanning && (
+								<Text style={[ts, styles.scanningLabel]}>Scanning…</Text>
 							)}
 						</View>
+						{hosts.map(d => (
+							<TouchableOpacity
+								key={d.host}
+								onPress={() => updateSetting('host', d.host)}
+								style={styles.discoveredHost}
+								accessibilityRole="button"
+								accessibilityLabel={`Use host ${d.host}`}
+							>
+								<Text style={[ts, styles.discoveredName]}>{d.name}</Text>
+								<Text style={[ts, styles.discoveredAddr]}>{d.host}</Text>
+							</TouchableOpacity>
+						))}
+						{!isScanning && hosts.length === 0 && (
+							<Text style={[ts, styles.noDevicesText]}>
+								No devices found. Ensure SSH is enabled on the host.
+							</Text>
+						)}
 					</View>
 				</ScrollView>
 
-				{/* Save profile modal */}
-				<Modal
-					visible={showSaveProfile}
-					transparent
-					animationType="fade"
-					onRequestClose={() => setShowSaveProfile(false)}
-				>
-					<View className="justify-center flex-1 px-6 bg-black/70">
-						<View className="p-5 border bg-zinc-900 rounded-xl border-zinc-700">
-							<Text
-								className="mb-4 text-lg font-bold text-white"
-								style={textScaleStyle}
-							>
-								Save Profile
-							</Text>
-							<Text
-								className="mb-1 text-sm text-zinc-400"
-								style={textScaleStyle}
-							>
-								Profile name
-							</Text>
-							<TextInput
-								value={profileName}
-								onChangeText={setProfileName}
-								placeholder="e.g. Home Server"
-								placeholderTextColor="#555"
-								className="p-3 mb-4 text-white border rounded-md bg-zinc-800 border-zinc-700"
-							/>
-							<View className="flex-row gap-3">
-								<TouchableOpacity
-									onPress={() => setShowSaveProfile(false)}
-									className="items-center flex-1 p-3 border rounded-md border-zinc-700"
-								>
-									<Text className="text-zinc-400" style={textScaleStyle}>
-										Cancel
-									</Text>
-								</TouchableOpacity>
-								<TouchableOpacity
-									onPress={handleSaveProfile}
-									className="items-center flex-1 p-3 bg-indigo-600 rounded-md"
-								>
-									<Text className="font-bold text-white" style={textScaleStyle}>
-										Save
-									</Text>
-								</TouchableOpacity>
-							</View>
-						</View>
-					</View>
-				</Modal>
+				{/* Profile form modal */}
+				<ProfileFormModal
+					visible={profileFormVisible}
+					onClose={() => setProfileFormVisible(false)}
+					onSave={handleSaveProfile}
+					initialProfile={editingProfile}
+					initialPassword={editingPassword}
+				/>
 			</SafeAreaView>
 		)
 	}
 
+	// ─── Connected (terminal) screen ───────────────────────────────────────────
+	//
+	// Layout:
+	//   SafeAreaView (top/left/right insets only)
+	//   └─ View with paddingBottom = keyboard height (or safe-area bottom when hidden)
+	//      ├─ terminalHeader  (session info + disconnect button)
+	//      ├─ terminalBody    (TerminalView: output + command input)
+	//      └─ TerminalToolbar (special-key row — lifts above keyboard via paddingBottom)
+	//
+	// KeyboardAvoidingView is replaced by direct Keyboard event listeners because
+	// behavior='height' is unreliable on Android when the parent uses flex sizing,
+	// and the Modal-based snippet modal only works because Modal gets auto-resize.
+
 	return (
-		<SafeAreaView className="flex-1 bg-black">
-			<View className="flex-row items-center justify-between p-2 border-b border-zinc-800 bg-zinc-900">
-				<Text
-					className="text-xs font-medium text-zinc-400"
-					style={textScaleStyle}
-				>
-					{settings.user}@{settings.host}
-				</Text>
-				<View className="flex-row gap-2">
-					<TouchableOpacity
-						onPress={() => setSnippetsVisible(true)}
-						className="px-2 py-1 rounded bg-zinc-800"
-					>
-						<Text className="text-xs text-white" style={textScaleStyle}>
-							Snippets
-						</Text>
-					</TouchableOpacity>
-					<TouchableOpacity
-						onPress={() => disconnect()}
-						className="px-2 py-1 rounded bg-red-900/50"
-					>
-						<Text className="text-xs text-red-400" style={textScaleStyle}>
-							Exit
-						</Text>
-					</TouchableOpacity>
+		<SafeAreaView
+			style={styles.terminalScreen}
+			edges={['top', 'left', 'right']}
+		>
+			{/* bottomPadding tracks keyboard height directly, lifts toolbar + input. */}
+			<View style={[styles.kavFlex, {paddingBottom: bottomPadding}]}>
+				{/* Status bar */}
+				<View style={styles.terminalHeader}>
+					<Text style={[ts, styles.terminalSessionLabel]}>
+						{settings.user}@{settings.host}
+					</Text>
+					<View style={styles.terminalHeaderActions}>
+						<TouchableOpacity
+							onPress={() => setSnippetsVisible(true)}
+							style={styles.terminalHeaderBtn}
+							accessibilityRole="button"
+							accessibilityLabel="Open snippets"
+						>
+							<MaterialCommunityIcons
+								name="code-braces"
+								size={16}
+								color="#a1a1aa"
+							/>
+							<Text style={[ts, styles.terminalHeaderBtnLabel]}>Snippets</Text>
+						</TouchableOpacity>
+						<TouchableOpacity
+							onPress={() => disconnect()}
+							style={[styles.terminalHeaderBtn, styles.terminalDisconnectBtn]}
+							accessibilityRole="button"
+							accessibilityLabel="Disconnect"
+						>
+							<MaterialCommunityIcons name="power" size={16} color="#f87171" />
+							<Text style={[ts, styles.terminalDisconnectLabel]}>Exit</Text>
+						</TouchableOpacity>
+					</View>
 				</View>
+
+				<View style={styles.terminalBody}>
+					<TerminalView output={output} onData={sendData} />
+				</View>
+
+				{/* Toolbar sits just above the keyboard thanks to paddingBottom */}
+				<TerminalToolbar onSend={sendData} />
 			</View>
 
-			<View className="flex-1">
-				<TerminalView output={output} onData={sendData} />
-			</View>
-
-			<TerminalToolbar onSend={sendData} />
-
-			<SnippetOverlay
+			<SnippetManagerModal
 				isVisible={isSnippetsVisible}
 				onClose={() => setSnippetsVisible(false)}
-				onSelect={sendData}
+				onSelect={handleSnippetSelect}
 			/>
 		</SafeAreaView>
 	)
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+	screen: {flex: 1},
+	scroll: {flex: 1},
+	scrollContent: {paddingHorizontal: 16, paddingVertical: 32},
+
+	// App header
+	appHeader: {alignItems: 'center', marginBottom: 28},
+	appIcon: {fontSize: 40, marginBottom: 6},
+	appTitle: {
+		fontSize: 24,
+		fontWeight: '700',
+		color: '#ffffff',
+		letterSpacing: -0.5,
+	},
+	appSubtitle: {fontSize: 13, color: '#71717a', marginTop: 2},
+
+	// Section
+	section: {marginBottom: 28},
+	sectionHeader: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		marginBottom: 10,
+	},
+	sectionLabel: {
+		fontSize: 11,
+		fontWeight: '700',
+		color: '#a1a1aa',
+		textTransform: 'uppercase',
+		letterSpacing: 0.8,
+	},
+
+	// Profile list
+	addProfileBtn: {flexDirection: 'row', alignItems: 'center', gap: 4},
+	addProfileLabel: {color: '#6366f1', fontWeight: '600', fontSize: 13},
+	noProfilesHint: {color: '#52525b', fontSize: 13, fontStyle: 'italic'},
+	profileCard: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		borderWidth: StyleSheet.hairlineWidth,
+		borderLeftWidth: 4,
+		borderRadius: 10,
+		marginBottom: 8,
+		overflow: 'hidden',
+	},
+	profileCardInfo: {flex: 1, paddingVertical: 12, paddingHorizontal: 14},
+	profileName: {color: '#f4f4f5', fontWeight: '600', fontSize: 14},
+	profileDesc: {color: '#71717a', fontSize: 12, marginTop: 1},
+	profileHost: {
+		color: '#6b7280',
+		fontSize: 11,
+		marginTop: 3,
+		fontFamily: 'monospace',
+	},
+	profileCardActions: {
+		flexDirection: 'row',
+		paddingRight: 8,
+		gap: 4,
+	},
+	profileActionBtn: {padding: 8},
+
+	// Quick-connect form
+	formRow: {flexDirection: 'row', gap: 10},
+	formFieldFlex: {flex: 1},
+	formFieldPort: {width: 80},
+	fieldLabel: {
+		fontSize: 11,
+		fontWeight: '600',
+		color: '#71717a',
+		marginBottom: 5,
+		marginTop: 10,
+		textTransform: 'uppercase',
+		letterSpacing: 0.4,
+	},
+	input: {
+		backgroundColor: '#18181b',
+		borderWidth: 1,
+		borderColor: '#3f3f46',
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: Platform.OS === 'ios' ? 11 : 9,
+		color: '#f4f4f5',
+		fontSize: 14,
+	},
+	errorText: {color: '#f87171', fontSize: 12, marginTop: 6},
+	connectBtn: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		gap: 8,
+		marginTop: 16,
+		paddingVertical: 14,
+		borderRadius: 10,
+		backgroundColor: '#6366f1',
+	},
+	connectBtnDisabled: {backgroundColor: '#3f3f46'},
+	connectBtnLabel: {color: '#ffffff', fontWeight: '700', fontSize: 15},
+	saveProfileBtn: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		gap: 6,
+		marginTop: 10,
+		paddingVertical: 11,
+		borderRadius: 8,
+		borderWidth: 1,
+		borderColor: '#3f3f46',
+	},
+	saveProfileLabel: {color: '#71717a', fontSize: 13},
+
+	// Discovery
+	scanningLabel: {color: '#52525b', fontSize: 10},
+	discoveredHost: {
+		flexDirection: 'row',
+		justifyContent: 'space-between',
+		paddingHorizontal: 12,
+		paddingVertical: 11,
+		marginBottom: 6,
+		backgroundColor: '#18181b',
+		borderRadius: 8,
+		borderWidth: StyleSheet.hairlineWidth,
+		borderColor: '#27272a',
+	},
+	discoveredName: {color: '#e4e4e7', fontSize: 13},
+	discoveredAddr: {color: '#52525b', fontSize: 12, fontFamily: 'monospace'},
+	noDevicesText: {color: '#3f3f46', fontSize: 12, fontStyle: 'italic'},
+
+	// Terminal session screen
+	terminalScreen: {flex: 1, backgroundColor: '#000000'},
+	kavFlex: {flex: 1},
+	terminalHeader: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderBottomWidth: StyleSheet.hairlineWidth,
+		borderBottomColor: '#27272a',
+		backgroundColor: '#18181b',
+	},
+	terminalSessionLabel: {
+		color: '#71717a',
+		fontSize: 12,
+		fontFamily: 'monospace',
+	},
+	terminalHeaderActions: {flexDirection: 'row', gap: 8},
+	terminalHeaderBtn: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 5,
+		paddingHorizontal: 10,
+		paddingVertical: 6,
+		borderRadius: 6,
+		backgroundColor: '#27272a',
+	},
+	terminalHeaderBtnLabel: {color: '#a1a1aa', fontSize: 12},
+	terminalDisconnectBtn: {backgroundColor: 'rgba(239,68,68,0.12)'},
+	terminalDisconnectLabel: {color: '#f87171', fontSize: 12},
+	terminalBody: {flex: 1},
+})

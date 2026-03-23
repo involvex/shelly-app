@@ -5,6 +5,10 @@ import {create} from 'zustand'
 interface SnippetState {
 	snippets: Snippet[]
 	addSnippet: (snippet: Omit<Snippet, 'id'>) => Promise<void>
+	updateSnippet: (
+		id: string,
+		partial: Partial<Omit<Snippet, 'id'>>,
+	) => Promise<void>
 	removeSnippet: (id: string) => Promise<void>
 	loadSnippets: () => Promise<void>
 }
@@ -26,6 +30,14 @@ export const useSnippetStore = create<SnippetState>((set, get) => ({
 
 	removeSnippet: async id => {
 		const updated = get().snippets.filter(s => s.id !== id)
+		set({snippets: updated})
+		await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+	},
+
+	updateSnippet: async (id, partial) => {
+		const updated = get().snippets.map(s =>
+			s.id === id ? {...s, ...partial} : s,
+		)
 		set({snippets: updated})
 		await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
 	},

@@ -17,7 +17,8 @@ function Icon({
 	// const iconName = (name ?? 'questionmark') as const
 	return (
 		<SymbolView
-			name={sfSymbol?.className || 'questionmark'}
+			// @ts-expect-error -- sf-symbols-typescript conditional type doesn't resolve across bun module instances
+			name={sfSymbol?.className ?? 'questionmark'}
 			tintColor={rgbaToHex(color ?? colors.foreground)}
 			size={size}
 			resizeMode="scaleAspectFit"
@@ -42,9 +43,9 @@ function rgbaToHex(color: string): string {
 	}
 
 	const [, rStr, gStr, bStr, aStr] = match
-	const r = Math.min(255, parseInt(rStr))
-	const g = Math.min(255, parseInt(gStr))
-	const b = Math.min(255, parseInt(bStr))
+	const r = Math.min(255, parseInt(rStr!))
+	const g = Math.min(255, parseInt(gStr!))
+	const b = Math.min(255, parseInt(bStr!))
 	const a = aStr !== undefined ? Math.round(parseFloat(aStr) * 255) : 255
 
 	const toHex = (n: number) => n.toString(16).padStart(2, '0')

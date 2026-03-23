@@ -1,15 +1,7 @@
 import {useProject, type PageContext} from '@/data/project'
 import * as Menu from '@/components/dropdown-menu'
 
-import {
-	Alert,
-	Platform,
-	Text,
-	View,
-	Share,
-	useColorScheme,
-	type TextStyle,
-} from 'react-native'
+import {Alert, Platform, Text, View, Share, useColorScheme} from 'react-native'
 import {MaterialIcons, Ionicons} from '@/components/icons'
 import {scaleText} from 'react-native-text'
 import {launchApp} from '@/lib/utils'
@@ -82,12 +74,10 @@ export function StylesMenu({children}: {children?: React.ReactElement}) {
 										{typeItem.name}
 									</Menu.ItemTitle>
 									<Menu.ItemSubtitle
-										style={
-											{
-												fontSize: textScaleStyle.fontSize * 0.8,
-												color: '#6b7280',
-											} as TextStyle
-										}
+										style={{
+											fontSize: textScaleStyle.fontSize * 0.8,
+											color: '#6b7280',
+										}}
 									>
 										{`${typeItem.size}, ${typeItem.weight}`}
 									</Menu.ItemSubtitle>

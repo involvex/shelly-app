@@ -233,13 +233,14 @@ export const ItemTitle = React.forwardRef<
 
 ItemTitle.displayName = 'ItemTitle'
 
-// Subtitle is an iOS feature, it's uncommon to have subtitles for web context menu items.
-export const ItemSubtitle = React.forwardRef<
-	React.ElementRef<typeof View>,
-	React.ComponentPropsWithoutRef<typeof View>
->(() => {
-	return null
-})
+// Subtitle is an iOS-native feature; rendered as nothing on web.
+// The style prop is typed permissively so tsc (which resolves .web.tsx first
+// via moduleSuffixes) accepts the TextStyle values (e.g. fontSize, color)
+// that callers pass through from the native API surface.
+export const ItemSubtitle = (_props: {
+	children?: React.ReactNode
+	style?: Record<string, unknown>
+}) => null
 
 ItemSubtitle.displayName = 'ItemSubtitle'
 

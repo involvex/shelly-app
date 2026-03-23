@@ -1,16 +1,9 @@
-import {
-	ScrollView,
-	StyleSheet,
-	Text,
-	TextInput,
-	TouchableOpacity,
-	View,
-} from 'react-native'
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {scaleText} from 'react-native-text'
-
-// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
-const textScaleStyle = scaleText({fontSize: 20})
+import React, {useCallback, useMemo, useRef, useState} from 'react'
+import {useCommandHistory} from '../hooks/useCommandHistory'
+import {CommandInput, TerminalOutput} from './terminal'
+import {TERMINAL_COLORS} from '../theme/terminal'
+import {StyleSheet, View} from 'react-native'
+import type {TextInput} from 'react-native'
 
 // Strip ANSI escape sequences so raw terminal codes don't appear as garbage.
 const ANSI_RE =
@@ -30,72 +23,55 @@ interface TerminalViewProps {
 	output: string
 }
 
+/**
+ * Native terminal view composing:
+ *   TerminalOutput   — scrollable SSH output area (auto-scrolls)
+ *   CommandInput     — keyboard-aware input row with history navigation
+ *
+ * NOTE: keyboard avoidance is handled by the parent screen's
+ * `KeyboardAvoidingView` which also wraps `TerminalToolbar`.  Do NOT add a
+ * nested KAV here — nesting two KAVs causes double-offset on iOS.
+ */
 export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
-	const scrollViewRef = useRef<ScrollView>(null)
 	const inputRef = useRef<TextInput>(null)
 	const [inputText, setInputText] = useState('')
+	const {addCommand, navigateUp, navigateDown} = useCommandHistory()
 
-	// Derive display text directly from output — no extra state, no update cascade.
+	// Derive display text — no extra state, pure memoisation.
 	const displayText = useMemo(() => processOutput(output ?? ''), [output])
-
-	// Scroll to bottom after the text grows. A single rAF delay lets the layout
-	// finish before we call scrollToEnd.
-	useEffect(() => {
-		const id = requestAnimationFrame(() => {
-			scrollViewRef.current?.scrollToEnd({animated: false})
-		})
-		return () => cancelAnimationFrame(id)
-	}, [displayText])
 
 	const sendInput = useCallback(() => {
 		const text = inputText.trim()
 		if (!text) return
+		addCommand(text)
 		// SSH shells expect CR (\r) as "Enter", not LF.
 		onData(text + '\r')
 		setInputText('')
+		// Keep focus so the user can immediately type the next command.
 		inputRef.current?.focus()
-	}, [inputText, onData])
+	}, [inputText, onData, addCommand])
+
+	const handleNavigateUp = useCallback(() => {
+		const cmd = navigateUp()
+		if (cmd !== null) setInputText(cmd)
+	}, [navigateUp])
+
+	const handleNavigateDown = useCallback(() => {
+		const cmd = navigateDown()
+		if (cmd !== null) setInputText(cmd)
+	}, [navigateDown])
 
 	return (
 		<View style={styles.container}>
-			{/* Output area */}
-			<ScrollView
-				ref={scrollViewRef}
-				style={styles.outputScroll}
-				contentContainerStyle={styles.outputContent}
-				keyboardShouldPersistTaps="handled"
-			>
-				<Text style={{...textScaleStyle, color: '#d4d4d4'}} selectable>
-					{displayText}
-				</Text>
-			</ScrollView>
-
-			{/* Input row */}
-			<View style={inputText ? styles.inputRowActive : styles.inputRow}>
-				<Text style={styles.promptSign}>›</Text>
-				<TextInput
-					ref={inputRef}
-					style={{...textScaleStyle, color: '#e2e2e2'}}
-					value={inputText}
-					onChangeText={setInputText}
-					onSubmitEditing={sendInput}
-					returnKeyType="send"
-					autoCapitalize="none"
-					autoCorrect={false}
-					autoComplete="off"
-					blurOnSubmit={false}
-					placeholderTextColor="#444"
-					placeholder="type command…"
-					selectionColor="#6366f1"
-				/>
-				<TouchableOpacity
-					onPress={sendInput}
-					style={styles.sendButton}
-					activeOpacity={0.7}
-				>
-					<Text style={{...textScaleStyle, color: '#6366f1'}}>↵</Text>
-				</TouchableOpacity>
-			</View>
+			<TerminalOutput output={displayText} />
+			<CommandInput
+				value={inputText}
+				onChangeText={setInputText}
+				onSubmit={sendInput}
+				onNavigateUp={handleNavigateUp}
+				onNavigateDown={handleNavigateDown}
+				inputRef={inputRef}
+			/>
 		</View>
 	)
 }
@@ -103,58 +79,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#0d0d0d',
-	},
-	outputScroll: {
-		flex: 1,
-	},
-	outputContent: {
-		padding: 10,
-		paddingBottom: 4,
-	},
-	outputText: {
-		color: '#d4d4d4',
-		fontFamily: 'monospace',
-		...textScaleStyle, // fontSize and lineHeight
-		marginBottom: 4,
-	},
-	inputRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		borderTopWidth: 1,
-		borderTopColor: '#2a2a2a',
-		backgroundColor: '#141414',
-		paddingHorizontal: 8,
-		paddingVertical: 4,
-	},
-	inputRowActive: {
-		backgroundColor: '#1a1a1a',
-		borderTopColor: '#6366f1',
-		flexDirection: 'row',
-		alignItems: 'center',
-		paddingHorizontal: 8,
-		paddingVertical: 4,
-	},
-	promptSign: {
-		color: '#6366f1',
-		...textScaleStyle,
-		fontWeight: 'bold',
-		paddingRight: 6,
-	},
-	input: {
-		flex: 1,
-		color: '#e2e2e2',
-		fontFamily: 'monospace',
-		...textScaleStyle,
-		paddingVertical: 8,
-	},
-	sendButton: {
-		paddingHorizontal: 10,
-		paddingVertical: 6,
-	},
-	sendIcon: {
-		color: '#6366f1',
-		...textScaleStyle,
-		fontWeight: 'bold',
+		backgroundColor: TERMINAL_COLORS.background,
 	},
 })
