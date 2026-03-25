@@ -101,9 +101,8 @@ function probePort(
 }
 
 export const useDiscoveryStore = create<DiscoveryState>(set => {
-	// Object property prevents TypeScript from narrowing `aborted` to the literal
-	// `false` inside startScan (TypeScript doesn't track cross-function mutations
-	// of plain `let` bindings, but it does not narrow object properties the same way).
+	// TS 5.4+ can preserve literal narrowing from last assignment.
+	// Wrap reads in Boolean(...) so checks stay typed as plain boolean.
 	const ctrl = {aborted: false}
 
 	return {

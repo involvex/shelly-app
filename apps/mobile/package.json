@@ -11,7 +11,6 @@
 		"expo:check": "bunx expo install --check",
 		"expo:prebuild": "bun run prebuild && expo prebuild",
 		"format": "prettier . --write",
-		"postinstall": "patch-package",
 		"ios": "expo run:ios",
 		"lint": "eslint src",
 		"lint:fix": "eslint src --fix",
@@ -77,7 +76,6 @@
 	},
 	"devDependencies": {
 		"@types/react": "~19.2.10",
-		"patch-package": "^8.0.0",
 		"typescript": "~5.9.2"
 	},
 	"expo": {
