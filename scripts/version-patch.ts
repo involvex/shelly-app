@@ -10,9 +10,10 @@
  */
 
 import {readFileSync, writeFileSync} from 'node:fs'
-import {join} from 'node:path'
+import {join, dirname} from 'node:path'
+import {fileURLToPath} from 'node:url'
 
-const rootDir = join(import.meta.dir, '..')
+const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const ROOT_PKG = join(rootDir, 'package.json')
 const MOBILE_PKG = join(rootDir, 'apps', 'mobile', 'package.json')

@@ -48,5 +48,8 @@
 	},
 	"peerDependencies": {
 		"typescript": "^5"
+	},
+	"sponsor": {
+		"url": "https://github.com/sponsors/involvex"
 	}
 }

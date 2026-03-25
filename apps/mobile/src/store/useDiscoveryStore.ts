@@ -1,24 +1,27 @@
+import {Platform} from 'react-native'
 import {create} from 'zustand'
 
 // Both expo-network and react-native-tcp-socket are native-only modules. A static
 // top-level import throws synchronously when the native bridge can't find the module
 // (e.g. running before a clean prebuild, on web, or in Expo Go). Use try-catch
-// require() so the store module always initialises successfully.
+// require() so the store module always initializes successfully.
 let Network: typeof import('expo-network') | null = null
-try {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	Network = require('expo-network')
-} catch {
-	// Native module unavailable — startScan will surface a user-facing error.
-}
-
 let TcpSocket: (typeof import('react-native-tcp-socket'))['default'] | null =
 	null
-try {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	TcpSocket = require('react-native-tcp-socket').default
-} catch {
-	// Native module unavailable — probePort will resolve false for every host.
+
+if (Platform.OS !== 'web') {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		Network = require('expo-network')
+	} catch {
+		// Native module unavailable — startScan will surface a user-facing error.
+	}
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		TcpSocket = require('react-native-tcp-socket').default
+	} catch {
+		// Native module unavailable — probePort will resolve false for every host.
+	}
 }
 
 export interface DiscoveredHost {
@@ -98,7 +101,10 @@ function probePort(
 }
 
 export const useDiscoveryStore = create<DiscoveryState>(set => {
-	let aborted = false
+	// Object property prevents TypeScript from narrowing `aborted` to the literal
+	// `false` inside startScan (TypeScript doesn't track cross-function mutations
+	// of plain `let` bindings, but it does not narrow object properties the same way).
+	const ctrl = {aborted: false}
 
 	return {
 		hosts: [],
@@ -108,7 +114,7 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 		scanError: null,
 
 		startScan: async () => {
-			aborted = false
+			ctrl.aborted = false
 			set({
 				isScanning: true,
 				hosts: [],
@@ -121,7 +127,9 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 				set({
 					isScanning: false,
 					scanError:
-						'Network scanning is unavailable. Rebuild the app with expo prebuild to enable this feature.',
+						Platform.OS === 'web'
+							? 'Device scanning is only available on Android and iOS.'
+							: 'Network scanning is unavailable. Rebuild the app with expo prebuild to enable this feature.',
 				})
 				return
 			}
@@ -153,7 +161,7 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 			if (!base) {
 				set({
 					isScanning: false,
-					scanError: 'Unrecognised IP format: ' + deviceIp,
+					scanError: 'Unrecognized IP format: ' + deviceIp,
 				})
 				return
 			}
@@ -167,7 +175,7 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 
 			let scanned = 0
 			for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-				if (aborted) break
+				if (ctrl.aborted) break
 				const batch = candidates.slice(i, i + BATCH_SIZE)
 				const results = await Promise.all(
 					batch.map(async host => ({
@@ -186,13 +194,13 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 				}))
 			}
 
-			if (!aborted) {
+			if (!ctrl.aborted) {
 				set({isScanning: false})
 			}
 		},
 
 		stopScan: () => {
-			aborted = true
+			ctrl.aborted = true
 			set({isScanning: false})
 		},
 	}
