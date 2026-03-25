@@ -4,12 +4,15 @@ import {
 	TERMINAL_SPACING,
 } from '../../theme/terminal'
 import {ScrollView, StyleSheet, Text, View} from 'react-native'
+import type {TerminalColors} from '../../theme/terminal'
 import React, {useEffect, useRef} from 'react'
 import type {ViewStyle} from 'react-native'
 
 interface TerminalOutputProps {
 	output: string
 	style?: ViewStyle
+	fontSize?: number
+	colors?: TerminalColors
 }
 
 /**
@@ -20,6 +23,8 @@ interface TerminalOutputProps {
 export const TerminalOutput: React.FC<TerminalOutputProps> = ({
 	output,
 	style,
+	fontSize,
+	colors = TERMINAL_COLORS,
 }) => {
 	const scrollRef = useRef<ScrollView>(null)
 
@@ -33,7 +38,7 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({
 	}, [output])
 
 	return (
-		<View style={[styles.wrapper, style]}>
+		<View style={[styles.wrapper, {backgroundColor: colors.background}, style]}>
 			<ScrollView
 				ref={scrollRef}
 				style={styles.scroll}
@@ -42,7 +47,11 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({
 				accessibilityLabel="Terminal output area"
 			>
 				<Text
-					style={styles.text}
+					style={[
+						styles.text,
+						{color: colors.outputText},
+						fontSize != null && {fontSize},
+					]}
 					selectable
 					accessibilityRole="text"
 					accessibilityLabel="SSH session output"
@@ -57,7 +66,6 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({
 const styles = StyleSheet.create({
 	wrapper: {
 		flex: 1,
-		backgroundColor: TERMINAL_COLORS.background,
 	},
 	scroll: {
 		flex: 1,
@@ -68,7 +76,6 @@ const styles = StyleSheet.create({
 		paddingBottom: 16,
 	},
 	text: {
-		color: TERMINAL_COLORS.outputText,
 		fontFamily: TERMINAL_FONT.family,
 		fontSize: TERMINAL_FONT.size,
 		lineHeight: TERMINAL_FONT.lineHeight,

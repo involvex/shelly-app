@@ -6,6 +6,7 @@ import {
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import {StyleSheet, TextInput, TouchableOpacity, View} from 'react-native'
 import type {TextInput as RNTextInput, ViewStyle} from 'react-native'
+import type {TerminalColors} from '../../theme/terminal'
 import {TerminalPrompt} from './TerminalPrompt'
 import React, {useState} from 'react'
 
@@ -20,6 +21,7 @@ interface CommandInputProps {
 	onNavigateDown: () => void
 	inputRef?: React.RefObject<RNTextInput | null>
 	style?: ViewStyle
+	colors?: TerminalColors
 }
 
 /**
@@ -39,6 +41,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 	onNavigateDown,
 	inputRef,
 	style,
+	colors = TERMINAL_COLORS,
 }) => {
 	const [isFocused, setIsFocused] = useState(false)
 
@@ -46,7 +49,10 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 		<View
 			style={[
 				styles.container,
-				isFocused ? styles.containerFocused : styles.containerIdle,
+				{
+					backgroundColor: isFocused ? colors.surfaceActive : colors.surface,
+					borderTopColor: isFocused ? colors.borderActive : colors.border,
+				},
 				style,
 			]}
 		>
@@ -61,7 +67,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 				<MaterialCommunityIcons
 					name="arrow-up"
 					size={18}
-					color={TERMINAL_COLORS.mutedText}
+					color={colors.mutedText}
 				/>
 			</TouchableOpacity>
 			<TouchableOpacity
@@ -74,7 +80,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 				<MaterialCommunityIcons
 					name="arrow-down"
 					size={18}
-					color={TERMINAL_COLORS.mutedText}
+					color={colors.mutedText}
 				/>
 			</TouchableOpacity>
 
@@ -84,7 +90,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 			{/* Command text field */}
 			<TextInput
 				ref={inputRef}
-				style={styles.input}
+				style={[styles.input, {color: colors.commandText}]}
 				value={value}
 				onChangeText={onChangeText}
 				onSubmitEditing={onSubmit}
@@ -95,9 +101,9 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 				autoCorrect={false}
 				autoComplete="off"
 				blurOnSubmit={false}
-				placeholderTextColor={TERMINAL_COLORS.subtleText}
+				placeholderTextColor={colors.subtleText}
 				placeholder="type command…"
-				selectionColor={TERMINAL_COLORS.accent}
+				selectionColor={colors.accent}
 				accessibilityLabel="Terminal command input"
 				accessibilityHint="Type a shell command and press Enter or the send button"
 			/>
@@ -114,7 +120,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({
 				<MaterialCommunityIcons
 					name="send"
 					size={18}
-					color={isFocused ? TERMINAL_COLORS.accent : TERMINAL_COLORS.mutedText}
+					color={isFocused ? colors.accent : colors.mutedText}
 				/>
 			</TouchableOpacity>
 		</View>
@@ -129,21 +135,12 @@ const styles = StyleSheet.create({
 		paddingHorizontal: TERMINAL_SPACING.inputPaddingH,
 		paddingVertical: TERMINAL_SPACING.inputPaddingV,
 	},
-	containerIdle: {
-		backgroundColor: TERMINAL_COLORS.surface,
-		borderTopColor: TERMINAL_COLORS.border,
-	},
-	containerFocused: {
-		backgroundColor: TERMINAL_COLORS.surfaceActive,
-		borderTopColor: TERMINAL_COLORS.borderActive,
-	},
 	navBtn: {
 		paddingHorizontal: 6,
 		paddingVertical: 4,
 	},
 	input: {
 		flex: 1,
-		color: TERMINAL_COLORS.commandText,
 		fontFamily: TERMINAL_FONT.family,
 		fontSize: TERMINAL_FONT.size,
 		lineHeight: TERMINAL_FONT.lineHeight,

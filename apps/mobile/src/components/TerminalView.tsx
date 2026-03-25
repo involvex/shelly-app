@@ -1,7 +1,8 @@
+import {useAppSettings, FONT_SIZE_MAP} from '../store/useAppSettings'
 import React, {useCallback, useMemo, useRef, useState} from 'react'
+import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {useCommandHistory} from '../hooks/useCommandHistory'
 import {CommandInput, TerminalOutput} from './terminal'
-import {TERMINAL_COLORS} from '../theme/terminal'
 import {StyleSheet, View} from 'react-native'
 import type {TextInput} from 'react-native'
 
@@ -36,6 +37,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 	const inputRef = useRef<TextInput>(null)
 	const [inputText, setInputText] = useState('')
 	const {addCommand, navigateUp, navigateDown} = useCommandHistory()
+	const {settings} = useAppSettings()
+
+	const colors =
+		TERMINAL_THEMES[settings.terminalTheme]?.colors ?? TERMINAL_COLORS
+	const fontSize = FONT_SIZE_MAP[settings.fontSize]
 
 	// Derive display text — no extra state, pure memoisation.
 	const displayText = useMemo(() => processOutput(output ?? ''), [output])
@@ -62,8 +68,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 	}, [navigateDown])
 
 	return (
-		<View style={styles.container}>
-			<TerminalOutput output={displayText} />
+		<View style={[styles.container, {backgroundColor: colors.background}]}>
+			<TerminalOutput
+				output={displayText}
+				colors={colors}
+				fontSize={fontSize}
+			/>
 			<CommandInput
 				value={inputText}
 				onChangeText={setInputText}
@@ -71,6 +81,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 				onNavigateUp={handleNavigateUp}
 				onNavigateDown={handleNavigateDown}
 				inputRef={inputRef}
+				colors={colors}
 			/>
 		</View>
 	)
@@ -79,6 +90,5 @@ export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: TERMINAL_COLORS.background,
 	},
 })

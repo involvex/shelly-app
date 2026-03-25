@@ -1,5 +1,13 @@
+import {
+	ScrollView,
+	StyleSheet,
+	Text,
+	TouchableOpacity,
+	View,
+} from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import {ScrollView, Text, TouchableOpacity, View} from 'react-native'
+import type {TerminalColors} from '../theme/terminal'
+import {TERMINAL_COLORS} from '../theme/terminal'
 import {scaleText} from 'react-native-text'
 import * as Clipboard from 'expo-clipboard'
 import React from 'react'
@@ -11,6 +19,7 @@ interface ToolbarButtonProps {
 	icon?: React.ReactNode
 	onPress: () => void
 	primary?: boolean
+	accentColor: string
 }
 
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({
@@ -18,26 +27,32 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
 	icon,
 	onPress,
 	primary,
+	accentColor,
 }) => (
 	<TouchableOpacity
 		onPress={onPress}
-		className={`flex-row items-center justify-center px-3 py-2 rounded-md mx-1 ${primary ? 'bg-indigo-600' : 'bg-zinc-800'}`}
+		style={[
+			styles.toolbarBtn,
+			primary ? {backgroundColor: accentColor} : styles.toolbarBtnDefault,
+		]}
 		accessibilityRole="button"
 		accessibilityLabel={label}
 	>
 		{icon ?? (
-			<Text style={textScaleStyle} className="font-medium text-white">
-				{label}
-			</Text>
+			<Text style={[textScaleStyle, styles.toolbarBtnText]}>{label}</Text>
 		)}
 	</TouchableOpacity>
 )
 
 interface TerminalToolbarProps {
 	onSend: (data: string) => void
+	colors?: TerminalColors
 }
 
-export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({onSend}) => {
+export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
+	onSend,
+	colors = TERMINAL_COLORS,
+}) => {
 	const pasteFromClipboard = async () => {
 		const text = await Clipboard.getStringAsync()
 		if (text) {
@@ -49,7 +64,6 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({onSend}) => {
 	const ICON_SIZE = 17
 
 	// Arrow keys use MaterialCommunityIcons; other keys keep text labels.
-	// All `code` values are unchanged to preserve existing SSH key-code mapping.
 	const buttons = [
 		{label: 'Tab', code: '\t', icon: null},
 		{label: 'Esc', code: '\x1b', icon: null},
@@ -102,22 +116,62 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({onSend}) => {
 	]
 
 	return (
-		<View className="py-1 border-t bg-zinc-900 border-zinc-800">
+		<View
+			style={[
+				styles.toolbar,
+				{
+					backgroundColor: colors.surface,
+					borderTopColor: colors.border,
+				},
+			]}
+		>
 			<ScrollView
 				horizontal
 				showsHorizontalScrollIndicator={false}
-				className="px-1"
+				style={styles.scroll}
 			>
-				<ToolbarButton label="Paste" onPress={pasteFromClipboard} primary />
+				<ToolbarButton
+					label="Paste"
+					onPress={pasteFromClipboard}
+					primary
+					accentColor={colors.accent}
+				/>
 				{buttons.map(btn => (
 					<ToolbarButton
 						key={btn.label}
 						label={btn.label}
 						icon={btn.icon ?? undefined}
 						onPress={() => btn.code && onSend(btn.code)}
+						accentColor={colors.accent}
 					/>
 				))}
 			</ScrollView>
 		</View>
 	)
 }
+
+const styles = StyleSheet.create({
+	toolbar: {
+		paddingVertical: 4,
+		borderTopWidth: 1,
+	},
+	scroll: {
+		paddingHorizontal: 4,
+	},
+	toolbarBtn: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderRadius: 6,
+		marginHorizontal: 4,
+	},
+	toolbarBtnDefault: {
+		backgroundColor: '#3f3f46',
+	},
+	toolbarBtnText: {
+		fontWeight: '500',
+		color: '#ffffff',
+	},
+})

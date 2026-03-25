@@ -1,6 +1,6 @@
 import SSHClient, {PtyType} from '@dylankenneally/react-native-ssh-sftp'
 import type {ISSHService, SSHConfig} from '@shelly/shared'
-import {NativeModules} from 'react-native'
+import {Dimensions, NativeModules} from 'react-native'
 
 type DataCallback = (data: string) => void
 type ErrorCallback = (error: Error) => void
@@ -61,6 +61,22 @@ export class SSHService implements ISSHService {
 			})
 
 			await this.client.startShell(PtyType.XTERM)
+
+			// Set terminal dimensions and environment variables so programs like git,
+			// vim, and less work correctly. The SSH library starts a 0×0 PTY; without
+			// explicit stty the kernel reports a device error when git tries to open
+			// /dev/tty (the "could not read Username / No such device" error).
+			const {width, height} = Dimensions.get('window')
+			const cols = Math.max(40, Math.floor(width / 8))
+			const rows = Math.max(20, Math.floor(height / 18))
+			setTimeout(() => {
+				if (this.client && this._isConnected) {
+					void this.client.writeToShell(
+						`stty cols ${cols} rows ${rows}; export TERM=xterm-256color; export GIT_TERMINAL_PROMPT=0\r`,
+					)
+				}
+			}, 300)
+
 			this._isConnected = true
 		} catch (err: unknown) {
 			this.client = null

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import type {TerminalThemeKey} from '@/theme/terminal'
 import {create} from 'zustand'
 
 const STORAGE_KEY = 'shelly_app_settings'
@@ -10,11 +11,14 @@ export interface AppSettings {
 	fontSize: FontSize
 	/** SSH keep-alive interval in seconds. 0 = disabled. */
 	keepAliveInterval: number
+	/** Terminal color theme. */
+	terminalTheme: TerminalThemeKey
 }
 
 const DEFAULTS: AppSettings = {
 	fontSize: 'medium',
 	keepAliveInterval: 30,
+	terminalTheme: 'default',
 }
 
 /** Maps the FontSize enum to actual pixel values used in TerminalView. */

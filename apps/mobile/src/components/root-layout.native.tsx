@@ -53,6 +53,19 @@ export default function NativeRootLayout() {
 						},
 					}}
 				/>
+				{/* Terminal manages its own header via SafeAreaView */}
+				<Stack.Screen name="terminal" options={{headerShown: false}} />
+				{/* Settings uses a styled native header */}
+				<Stack.Screen
+					name="settings"
+					options={{
+						title: 'Settings',
+						headerStyle: {backgroundColor: '#0f0f0f'},
+						headerTintColor: '#f4f4f5',
+						headerTitleStyle: {fontWeight: '600', color: '#f4f4f5'},
+						headerShadowVisible: false,
+					}}
+				/>
 				<Stack.Screen
 					name="modal"
 					options={{presentation: 'modal', title: 'Upgrade'}}

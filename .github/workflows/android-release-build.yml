@@ -1,12 +1,12 @@
 # =============================================================================
-# Android Debug APK Build
+# Android Release APK Build
 # =============================================================================
 #
 # PURPOSE
 # -------
-# Builds a debug APK for the Expo React Native app at apps/mobile and stores
-# it as a downloadable workflow artifact. Suitable for device testing and
-# PR validation without requiring local Android tooling.
+# Builds an unsigned release APK for the Expo React Native app at apps/mobile
+# and stores it as a downloadable workflow artifact. Release variant enables
+# R8 code shrinking and optimisations without requiring a signing keystore.
 #
 # MONOREPO CONTEXT
 # ----------------
@@ -25,16 +25,16 @@
 #
 # APK OUTPUT
 # ----------
-# apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+# apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
 #
 # =============================================================================
 
-name: Build Android Debug APK
+name: Build Android Release APK
 
 # ─── Triggers ────────────────────────────────────────────────────────────────
 on:
   # Run on every push to the primary branch. Acts as the final gate that
-  # confirms the merged state still produces a valid APK.
+  # confirms the merged state still produces a valid release APK.
   push:
     branches: [main]
 
@@ -66,7 +66,7 @@ permissions:
 # ─── Jobs ────────────────────────────────────────────────────────────────────
 jobs:
   build-android-apk:
-    name: Build Android Debug APK
+    name: Build Android Release APK
 
     # ubuntu-latest provides:
     #   • Android SDK pre-installed at /usr/local/lib/android/sdk
@@ -403,18 +403,20 @@ jobs:
         run: chmod +x apps/mobile/android/gradlew
 
       # ─────────────────────────────────────────────────────────────────────
-      # STEP 11 — BUILD DEBUG APK
+      # STEP 11 — BUILD RELEASE APK
       # ─────────────────────────────────────────────────────────────────────
-      # `assembleDebug` compiles all Java/Kotlin sources, processes resources,
-      # links native libraries, and packages everything into a debug APK.
+      # `assembleRelease` compiles all Java/Kotlin sources, processes resources,
+      # links native libraries, runs R8 code shrinking/optimisation, and
+      # packages everything into an unsigned release APK.
       #
-      # Debug vs release:
-      #   • debuggable=true      — enables USB debugging and logcat attachment
-      #   • No code shrinking    — ProGuard/R8 disabled; full stack traces
-      #   • No obfuscation       — class/method names remain readable in traces
-      #   • Debug signing        — signed with a development keystore
-      #   • Installable on any Android device with "Install unknown apps" or
-      #     via adb: `adb install app-debug.apk`
+      # Release vs debug:
+      #   • debuggable=false     — no USB debugging or logcat attachment
+      #   • R8/ProGuard enabled  — code shrinking, dead-code removal
+      #   • Obfuscation enabled  — shorter class/method names in stack traces
+      #   • Unsigned output      — app-release-unsigned.apk; must be signed
+      #                            before uploading to the Play Store
+      #   • Installable via adb: `adb install app-release-unsigned.apk`
+      #                          (requires --allow-test on some devices)
       #
       # Gradle flags:
       #   --no-daemon    — explicitly disable the Gradle daemon. Already set
@@ -433,11 +435,11 @@ jobs:
       #   parallel=true, configureondemand=true, Xmx4g, MaxMetaspaceSize=512m
       #
       # APK output location (standard Android build convention):
-      #   app/build/outputs/apk/debug/app-debug.apk
+      #   app/build/outputs/apk/release/app-release-unsigned.apk
       #
       # COMMON FAILURE SCENARIOS
       # ─────────────────────────────────────────────────────────────────────
-      # 1. "Task :app:compileDebugJavaWithJavac FAILED"
+      # 1. "Task :app:compileReleaseJavaWithJavac FAILED"
       #    Cause: Java compilation error in generated or library code.
       #    Fix:   Inspect the full build log. Often a misconfigured Expo plugin
       #           or incompatible library version. Run `expo doctor` locally.
@@ -449,7 +451,7 @@ jobs:
       #           Add the required ndk.dir to local.properties or set
       #           ANDROID_NDK_HOME explicitly.
       #
-      # 3. "Execution failed for task ':app:processDebugManifest'"
+      # 3. "Execution failed for task ':app:processReleaseManifest'"
       #    Cause: AndroidManifest.xml merge conflict between the app and a
       #           library (common with SSH/Bluetooth libraries).
       #    Fix:   Add `tools:replace` attributes to the conflicting manifest
@@ -464,12 +466,12 @@ jobs:
       #    Cause: Build exceeds the JVM heap set in GRADLE_OPTS.
       #    Fix:   Increase -Xmx above 4g (e.g., -Xmx6g) if the runner has
       #           enough free memory. ubuntu-latest has 7 GB total RAM.
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       # ─────────────────────────────────────────────────────────────────────
-      # STEP 12 — UPLOAD DEBUG APK ARTIFACT
+      # STEP 12 — UPLOAD RELEASE APK ARTIFACT
       # ─────────────────────────────────────────────────────────────────────
       # Stores the built APK as a GitHub Actions artifact. Team members and
       # testers can download it directly from the workflow run summary page
@@ -477,36 +479,34 @@ jobs:
       #
       # Installing the APK on a device:
       #   1. Download the artifact ZIP from the run summary page.
-      #   2. Extract app-debug.apk from the ZIP.
-      #   3. Option A: `adb install app-debug.apk` (USB debugging enabled)
+      #   2. Extract app-release-unsigned.apk from the ZIP.
+      #   3. Option A: `adb install app-release-unsigned.apk` (USB debugging)
       #   4. Option B: Transfer to device and open with a file manager
       #      (requires "Install unknown apps" enabled in Android settings)
       #
-      # Naming convention: shelly-debug-apk-<full-sha> makes it easy to
+      # Naming convention: shelly-release-apk-<full-sha> makes it easy to
       # correlate an artifact to its source commit in git history.
       #
-      # retention-days: 7 — debug APKs have a short useful life. Seven days
-      # covers the typical PR review cycle while preventing unbounded storage
-      # growth from hundreds of automated builds accumulating indefinitely.
-      # Increase to 30 for release-candidate builds that need longer retention.
+      # retention-days: 30 — release APKs have a longer useful life than debug
+      # builds. 30 days covers the typical release validation and review cycle.
       #
       # if-no-files-found: error — fail the step if the expected APK path is
       # missing even though Gradle reported success. This catches edge cases
       # where the output directory structure changed (e.g., a new Gradle plugin
       # that renames the output) rather than silently uploading an empty artifact.
-      - name: Upload debug APK artifact
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: shelly-debug-apk-${{ github.sha }}
-          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
+          name: shelly-release-apk-${{ github.sha }}
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30
           if-no-files-found: error
 
       # ─────────────────────────────────────────────────────────────────────
       # STEP 13 — UPLOAD GRADLE BUILD REPORTS ON FAILURE (DIAGNOSTIC)
       # ─────────────────────────────────────────────────────────────────────
-      # When assembleDebug fails, Gradle writes detailed HTML reports to
+      # When assembleRelease fails, Gradle writes detailed HTML reports to
       # app/build/reports/. These reports include:
       #   • Full task execution timeline
       #   • Lint violations
@@ -563,11 +563,12 @@ jobs:
 # SECRETS REFERENCE
 # =============================================================================
 #
-# This debug-APK workflow requires NO repository secrets. The debug APK is
-# signed with a development keystore that is generated automatically by the
-# Android build tools — no key material is needed.
+# This unsigned-release workflow requires NO repository secrets. The unsigned
+# APK is built without a signing keystore — suitable for testing release-mode
+# optimisations (R8, ProGuard) without Play Store distribution.
 #
-# For RELEASE builds (upload to Play Store), you would add:
+# To produce a SIGNED release APK for Play Store distribution, add a signing
+# step before assembleRelease using these secrets:
 #   secrets.ANDROID_KEYSTORE_BASE64   — base64-encoded .jks keystore file
 #   secrets.KEYSTORE_PASSWORD         — keystore password
 #   secrets.KEY_ALIAS                 — key alias within the keystore
@@ -581,16 +582,16 @@ jobs:
 # =============================================================================
 #
 # Transient failures (network blips during Gradle dependency downloads or
-# intermittent Maven Central outages) can cause the assembleDebug step to
+# intermittent Maven Central outages) can cause the assembleRelease step to
 # fail. To add automatic retry logic, wrap the Gradle step with:
 #
-#   - name: Build debug APK (with retry)
+#   - name: Build release APK (with retry)
 #     uses: nick-invision/retry@v3
 #     with:
 #       timeout_minutes: 40
 #       max_attempts: 3
 #       retry_wait_seconds: 30
-#       command: cd apps/mobile/android && ./gradlew assembleDebug --no-daemon --stacktrace
+#       command: cd apps/mobile/android && ./gradlew assembleRelease --no-daemon --stacktrace
 #
 # Install the action: it is a community action — pin to a full commit SHA for
 # supply-chain security if retries are critical to your workflow reliability.

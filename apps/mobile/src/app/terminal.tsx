@@ -12,6 +12,7 @@ import {
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context'
 import {SnippetManagerModal} from '../components/SnippetManagerModal'
+import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {ProfileFormModal} from '../components/ProfileFormModal'
 import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
@@ -19,12 +20,14 @@ import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
 import type {SSHProfile} from '../store/useSSHProfiles'
 import {useSSHProfiles} from '../store/useSSHProfiles'
+import {useAppSettings} from '../store/useAppSettings'
 import {useSSHSettings} from '../hooks/useSSHSettings'
 import {useColorScheme} from '../lib/useColorScheme'
 import {useEffect, useRef, useState} from 'react'
 import {useSSHStore} from '../store/useSSHStore'
 import {scaleText} from 'react-native-text'
 import {StatusBar} from 'expo-status-bar'
+import {router} from 'expo-router'
 
 const ts = scaleText({fontSize: 14})
 
@@ -32,7 +35,8 @@ export default function TerminalScreen() {
 	const {output, isConnecting, error, connect, sendData, service, disconnect} =
 		useSSHStore()
 	const {loadSnippets} = useSnippetStore()
-	const {hosts, isScanning, startScan} = useDiscoveryStore()
+	const {hosts, isScanning, scanProgress, scanTotal, scanError, startScan} =
+		useDiscoveryStore()
 	const {settings, updateSetting, save, loaded} = useSSHSettings()
 	const {
 		profiles,
@@ -45,6 +49,10 @@ export default function TerminalScreen() {
 	} = useSSHProfiles()
 
 	const {colors, colorScheme} = useColorScheme()
+
+	const {settings: appSettings} = useAppSettings()
+	const terminalColors =
+		TERMINAL_THEMES[appSettings.terminalTheme]?.colors ?? TERMINAL_COLORS
 
 	const [isSnippetsVisible, setSnippetsVisible] = useState(false)
 	const [profileFormVisible, setProfileFormVisible] = useState(false)
@@ -193,9 +201,25 @@ export default function TerminalScreen() {
 				>
 					{/* ── App Header ── */}
 					<View style={styles.appHeader}>
-						<Text style={styles.appIcon}>🐚</Text>
-						<Text style={[ts, styles.appTitle]}>Shelly</Text>
-						<Text style={[ts, styles.appSubtitle]}>SSH Client</Text>
+						<View style={styles.appHeaderRow}>
+							<Text style={styles.appIcon}>🐚</Text>
+							<View style={styles.appHeaderText}>
+								<Text style={[ts, styles.appTitle]}>Shelly</Text>
+								<Text style={[ts, styles.appSubtitle]}>SSH Client</Text>
+							</View>
+						</View>
+						<TouchableOpacity
+							onPress={() => router.push('/settings')}
+							style={styles.settingsBtn}
+							accessibilityRole="button"
+							accessibilityLabel="Open settings"
+						>
+							<MaterialCommunityIcons
+								name="cog-outline"
+								size={22}
+								color="#a1a1aa"
+							/>
+						</TouchableOpacity>
 					</View>
 
 					{/* ── Saved profiles ── */}
@@ -387,8 +411,25 @@ export default function TerminalScreen() {
 					<View style={styles.section}>
 						<View style={styles.sectionHeader}>
 							<Text style={[ts, styles.sectionLabel]}>Local Devices</Text>
-							{isScanning && (
-								<Text style={[ts, styles.scanningLabel]}>Scanning…</Text>
+							{isScanning ? (
+								<Text style={[ts, styles.scanningLabel]}>
+									Scanning…
+									{scanTotal > 0 ? ` (${scanProgress}/${scanTotal})` : ''}
+								</Text>
+							) : (
+								<TouchableOpacity
+									onPress={() => startScan()}
+									style={styles.rescanBtn}
+									accessibilityRole="button"
+									accessibilityLabel="Rescan for devices"
+								>
+									<MaterialCommunityIcons
+										name="refresh"
+										size={14}
+										color="#6366f1"
+									/>
+									<Text style={[ts, styles.rescanLabel]}>Rescan</Text>
+								</TouchableOpacity>
 							)}
 						</View>
 						{hosts.map(d => (
@@ -403,9 +444,12 @@ export default function TerminalScreen() {
 								<Text style={[ts, styles.discoveredAddr]}>{d.host}</Text>
 							</TouchableOpacity>
 						))}
-						{!isScanning && hosts.length === 0 && (
+						{!isScanning && scanError != null && (
+							<Text style={[ts, styles.scanErrorText]}>{scanError}</Text>
+						)}
+						{!isScanning && hosts.length === 0 && scanError == null && (
 							<Text style={[ts, styles.noDevicesText]}>
-								No devices found. Ensure SSH is enabled on the host.
+								No SSH devices found on this network.
 							</Text>
 						)}
 					</View>
@@ -463,6 +507,18 @@ export default function TerminalScreen() {
 							<Text style={[ts, styles.terminalHeaderBtnLabel]}>Snippets</Text>
 						</TouchableOpacity>
 						<TouchableOpacity
+							onPress={() => router.push('/settings')}
+							style={styles.terminalHeaderBtn}
+							accessibilityRole="button"
+							accessibilityLabel="Open settings"
+						>
+							<MaterialCommunityIcons
+								name="cog-outline"
+								size={16}
+								color="#a1a1aa"
+							/>
+						</TouchableOpacity>
+						<TouchableOpacity
 							onPress={() => disconnect()}
 							style={[styles.terminalHeaderBtn, styles.terminalDisconnectBtn]}
 							accessibilityRole="button"
@@ -479,7 +535,7 @@ export default function TerminalScreen() {
 				</View>
 
 				{/* Toolbar sits just above the keyboard thanks to paddingBottom */}
-				<TerminalToolbar onSend={sendData} />
+				<TerminalToolbar onSend={sendData} colors={terminalColors} />
 			</View>
 
 			<SnippetManagerModal
@@ -499,15 +555,27 @@ const styles = StyleSheet.create({
 	scrollContent: {paddingHorizontal: 16, paddingVertical: 32},
 
 	// App header
-	appHeader: {alignItems: 'center', marginBottom: 28},
-	appIcon: {fontSize: 40, marginBottom: 6},
+	appHeader: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		marginBottom: 28,
+	},
+	appHeaderRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
+	appHeaderText: {gap: 2},
+	appIcon: {fontSize: 36},
 	appTitle: {
-		fontSize: 24,
+		fontSize: 22,
 		fontWeight: '700',
 		color: '#ffffff',
 		letterSpacing: -0.5,
 	},
-	appSubtitle: {fontSize: 13, color: '#71717a', marginTop: 2},
+	appSubtitle: {fontSize: 12, color: '#71717a'},
+	settingsBtn: {
+		padding: 8,
+		borderRadius: 8,
+		backgroundColor: '#18181b',
+	},
 
 	// Section
 	section: {marginBottom: 28},
@@ -619,6 +687,9 @@ const styles = StyleSheet.create({
 	discoveredName: {color: '#e4e4e7', fontSize: 13},
 	discoveredAddr: {color: '#52525b', fontSize: 12, fontFamily: 'monospace'},
 	noDevicesText: {color: '#3f3f46', fontSize: 12, fontStyle: 'italic'},
+	rescanBtn: {flexDirection: 'row', alignItems: 'center', gap: 4},
+	rescanLabel: {color: '#6366f1', fontSize: 12},
+	scanErrorText: {color: '#f87171', fontSize: 12, fontStyle: 'italic'},
 
 	// Terminal session screen
 	terminalScreen: {flex: 1, backgroundColor: '#000000'},

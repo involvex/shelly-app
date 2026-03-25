@@ -1,43 +1,43 @@
 {
-  "scheme": "shelly",
-  "userInterfaceStyle": "automatic",
-  "orientation": "default",
-  "owner": "involvex",
-  "version": "0.0.1",
-  "icon": "assets/icon512x512.png",
-  "splash": {
-    "image": "assets/icon1024x1024.png",
-    "backgroundColor": "#000000",
-    "resizeMode": "contain"
-  },
-  "web": {
-    "output": "static",
-    "favicon": "assets/icon512x512.png"
-  },
-  "plugins": [
-    "expo-router",
-    "@bacons/apple-colors",
-    "expo-web-browser",
-    "expo-secure-store",
-    "expo-font"
-  ],
-  "android": {
-    "package": "com.involvex.shelly",
-    "icon": "assets/icon512x512.png",
-    "userInterfaceStyle": "automatic",
-    "versionCode": 1
-  },
-  "ios": {
-    "icon": "assets/icon512x512.png"
-  },
-  "description": "A mobile ssh client",
-  "name": "Shelly",
-  "slug": "shelly-app",
-  "githubUrl": "https://github.com/involvex/shelly-app",
-  "extra": {
-    "router": {},
-    "eas": {
-      "projectId": "263992e7-4a06-4c89-bfa0-e965a3a8e7e3"
-    }
-  }
+	"scheme": "shelly",
+	"userInterfaceStyle": "automatic",
+	"orientation": "default",
+	"owner": "involvex",
+	"version": "0.0.1",
+	"icon": "assets/icon512x512.png",
+	"splash": {
+		"image": "assets/icon1024x1024.png",
+		"backgroundColor": "#000000",
+		"resizeMode": "contain"
+	},
+	"web": {
+		"output": "static",
+		"favicon": "assets/icon512x512.png"
+	},
+	"plugins": [
+		"expo-router",
+		"@bacons/apple-colors",
+		"expo-web-browser",
+		"expo-secure-store",
+		"expo-font"
+	],
+	"android": {
+		"package": "com.involvex.shelly",
+		"icon": "assets/icon512x512.png",
+		"userInterfaceStyle": "automatic",
+		"versionCode": 1
+	},
+	"ios": {
+		"icon": "assets/icon512x512.png"
+	},
+	"description": "A mobile ssh client",
+	"name": "Shelly",
+	"slug": "shelly-app",
+	"githubUrl": "https://github.com/involvex/shelly-app",
+	"extra": {
+		"router": {},
+		"eas": {
+			"projectId": "263992e7-4a06-4c89-bfa0-e965a3a8e7e3"
+		}
+	}
 }

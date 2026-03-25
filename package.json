@@ -19,6 +19,7 @@
 		"build": "bun run build:shared && bun run build:app",
 		"build:app": "bun run -F @shelly/mobile expo:prebuild",
 		"build:shared": "bun run -F @shelly/shared build",
+		"check:app": "bun run prebuild && bun run -F @shelly/mobile check",
 		"format": "prettier . --write",
 		"lint": "eslint .",
 		"lint:fix": "eslint --fix .",
