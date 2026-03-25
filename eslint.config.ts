@@ -97,4 +97,10 @@ export default defineConfig([
 				]
 			: []),
 	...tseslint.configs.recommended,
+	{
+		files: ['apps/mobile/plugins/**/*.js'],
+		rules: {
+			'@typescript-eslint/no-require-imports': 'off',
+		},
+	},
 ])

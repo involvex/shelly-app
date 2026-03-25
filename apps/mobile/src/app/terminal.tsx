@@ -35,8 +35,15 @@ export default function TerminalScreen() {
 	const {output, isConnecting, error, connect, sendData, service, disconnect} =
 		useSSHStore()
 	const {loadSnippets} = useSnippetStore()
-	const {hosts, isScanning, scanProgress, scanTotal, scanError, startScan} =
-		useDiscoveryStore()
+	const {
+		hosts,
+		isScanning,
+		isAvailable: isDiscoveryAvailable,
+		scanProgress,
+		scanTotal,
+		scanError,
+		startScan,
+	} = useDiscoveryStore()
 	const {settings, updateSetting, save, loaded} = useSSHSettings()
 	const {
 		profiles,
@@ -419,6 +426,7 @@ export default function TerminalScreen() {
 							) : (
 								<TouchableOpacity
 									onPress={() => startScan()}
+									disabled={!isDiscoveryAvailable}
 									style={styles.rescanBtn}
 									accessibilityRole="button"
 									accessibilityLabel="Rescan for devices"
@@ -432,6 +440,11 @@ export default function TerminalScreen() {
 								</TouchableOpacity>
 							)}
 						</View>
+						{!isDiscoveryAvailable && (
+							<Text style={[ts, styles.discoveryDisabledText]}>
+								Local discovery is disabled in this runtime.
+							</Text>
+						)}
 						{hosts.map(d => (
 							<TouchableOpacity
 								key={d.host}
@@ -690,6 +703,7 @@ const styles = StyleSheet.create({
 	rescanBtn: {flexDirection: 'row', alignItems: 'center', gap: 4},
 	rescanLabel: {color: '#6366f1', fontSize: 12},
 	scanErrorText: {color: '#f87171', fontSize: 12, fontStyle: 'italic'},
+	discoveryDisabledText: {color: '#a1a1aa', fontSize: 12, marginBottom: 8},
 
 	// Terminal session screen
 	terminalScreen: {flex: 1, backgroundColor: '#000000'},

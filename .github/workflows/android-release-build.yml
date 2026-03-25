@@ -335,6 +335,29 @@ jobs:
         working-directory: apps/mobile
         run: bunx expo prebuild --platform android --no-install --clean
 
+      # Ensure the generated app/build.gradle still contains the BouncyCastle
+      # exclusion used to avoid duplicate-class failures between:
+      #   org.bouncycastle:bcprov-jdk15on and org.bouncycastle:bcprov-jdk15to18
+      # If missing, append a safeguard block and fail loudly if we still cannot
+      # verify it. The durable source of truth is the Expo config plugin.
+      - name: Verify BouncyCastle exclusion in generated app/build.gradle
+        run: |
+          APP_GRADLE="apps/mobile/android/app/build.gradle"
+          PATTERN='exclude group: "org.bouncycastle", module: "bcprov-jdk15on"'
+          if ! grep -q "$PATTERN" "$APP_GRADLE"; then
+            echo "::warning::BouncyCastle exclusion missing after prebuild. Appending temporary CI safeguard."
+            cat <<'EOF' >> "$APP_GRADLE"
+
+          configurations.configureEach {
+            exclude group: "org.bouncycastle", module: "bcprov-jdk15on"
+          }
+          EOF
+          fi
+          if ! grep -q "$PATTERN" "$APP_GRADLE"; then
+            echo "::error::Failed to enforce BouncyCastle exclusion in $APP_GRADLE"
+            exit 1
+          fi
+
       # ─────────────────────────────────────────────────────────────────────
       # STEP 8 — RESTORE GRADLE WRAPPER DISTRIBUTION CACHE
       # ─────────────────────────────────────────────────────────────────────
@@ -473,6 +496,17 @@ jobs:
       - name: Build release APK
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      # On failures, print a focused dependency insight for BouncyCastle to make
+      # duplicate-class root causes obvious in CI logs.
+      - name: Dependency insight for BouncyCastle on failure
+        if: failure()
+        working-directory: apps/mobile/android
+        run: |
+          ./gradlew :app:dependencyInsight \
+            --configuration releaseRuntimeClasspath \
+            --dependency bcprov \
+            --no-daemon || true
 
       # ─────────────────────────────────────────────────────────────────────
       # STEP 12 — UPLOAD RELEASE APK ARTIFACT

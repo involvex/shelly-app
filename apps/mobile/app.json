@@ -19,7 +19,8 @@
 		"@bacons/apple-colors",
 		"expo-web-browser",
 		"expo-secure-store",
-		"expo-font"
+		"expo-font",
+		"./plugins/with-bouncycastle-fix"
 	],
 	"android": {
 		"package": "com.involvex.shelly",

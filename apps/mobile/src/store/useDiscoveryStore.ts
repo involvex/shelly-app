@@ -1,3 +1,4 @@
+import Constants from 'expo-constants'
 import {Platform} from 'react-native'
 import {create} from 'zustand'
 
@@ -33,6 +34,8 @@ export interface DiscoveredHost {
 interface DiscoveryState {
 	hosts: DiscoveredHost[]
 	isScanning: boolean
+	/** True when native discovery dependencies are available in the current runtime. */
+	isAvailable: boolean
 	/** Number of addresses probed so far in the current scan. */
 	scanProgress: number
 	/** Total addresses to probe (set at scan start). */
@@ -46,6 +49,29 @@ interface DiscoveryState {
 const BATCH_SIZE = 30
 const PROBE_TIMEOUT = 800
 const SSH_PORT = 22
+
+function unavailableRuntimeMessage(params: {
+	platform: string
+	isExpoGoRuntime: boolean
+	hasNetwork: boolean
+	hasTcpSocket: boolean
+}): string | null {
+	const {platform, isExpoGoRuntime, hasNetwork, hasTcpSocket} = params
+	if (platform === 'web') {
+		return 'Device scanning is only available on Android and iOS.'
+	}
+	if (!hasNetwork) {
+		return isExpoGoRuntime
+			? 'Network scanning is unavailable in Expo Go. Open this app in a development build (not Expo Go) to enable local discovery.'
+			: 'Network scanning native module is unavailable. Rebuild and reinstall the development build (expo run:android / expo run:ios).'
+	}
+	if (!hasTcpSocket) {
+		return isExpoGoRuntime
+			? 'Port scanning is unavailable in Expo Go. Open this app in a development build (not Expo Go) to enable local discovery.'
+			: 'Port scanning native module is unavailable. Rebuild and reinstall the development build after native dependency changes.'
+	}
+	return null
+}
 
 function subnetBase(ip: string): string | null {
 	const parts = ip.split('.')
@@ -104,13 +130,24 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 	// TS 5.4+ can preserve literal narrowing from last assignment.
 	// Wrap reads in Boolean(...) so checks stay typed as plain boolean.
 	const ctrl = {aborted: false}
+	const runtime = Constants.executionEnvironment
+	const isExpoGoRuntime = runtime === 'storeClient'
+	const hasNetwork = Boolean(Network)
+	const hasTcpSocket = Boolean(TcpSocket)
+	const unavailableMessage = unavailableRuntimeMessage({
+		platform: Platform.OS,
+		isExpoGoRuntime,
+		hasNetwork,
+		hasTcpSocket,
+	})
 
 	return {
 		hosts: [],
 		isScanning: false,
+		isAvailable: unavailableMessage == null,
 		scanProgress: 0,
 		scanTotal: 0,
-		scanError: null,
+		scanError: unavailableMessage,
 
 		startScan: async () => {
 			ctrl.aborted = false
@@ -125,10 +162,24 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 			if (!Network) {
 				set({
 					isScanning: false,
-					scanError:
-						Platform.OS === 'web'
-							? 'Device scanning is only available on Android and iOS.'
-							: 'Network scanning is unavailable. Rebuild the app with expo prebuild to enable this feature.',
+					scanError: unavailableRuntimeMessage({
+						platform: Platform.OS,
+						isExpoGoRuntime,
+						hasNetwork: false,
+						hasTcpSocket,
+					}),
+				})
+				return
+			}
+			if (!TcpSocket) {
+				set({
+					isScanning: false,
+					scanError: unavailableRuntimeMessage({
+						platform: Platform.OS,
+						isExpoGoRuntime,
+						hasNetwork: true,
+						hasTcpSocket: false,
+					}),
 				})
 				return
 			}

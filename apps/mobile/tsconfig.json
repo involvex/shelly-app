@@ -12,6 +12,7 @@
 		"global.d.ts",
 		"**/*.ts",
 		"**/*.tsx",
+		"plugins/**/*.js",
 		"nativewind-env.d.ts",
 		"babel.config.js",
 		"metro.config.js",
