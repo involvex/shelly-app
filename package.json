@@ -1,6 +1,6 @@
 {
 	"name": "shelly-app",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"private": true,
 	"repository": {
 		"url": "git+https://github.com/involvex/shelly-app.git"
@@ -24,7 +24,8 @@
 		"lint": "eslint .",
 		"lint:fix": "eslint --fix .",
 		"start:app": "bun run -F @shelly/mobile start",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"version:patch": "bun run scripts/version-patch.ts"
 	},
 	"prettier": "@involvex/prettier-config",
 	"dependencies": {
