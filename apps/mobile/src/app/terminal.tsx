@@ -32,8 +32,15 @@ import {router} from 'expo-router'
 const ts = scaleText({fontSize: 14})
 
 export default function TerminalScreen() {
-	const {output, isConnecting, error, connect, sendData, service, disconnect} =
-		useSSHStore()
+	const {
+		output,
+		isConnecting,
+		isConnected,
+		error,
+		connect,
+		sendData,
+		disconnect,
+	} = useSSHStore()
 	const {loadSnippets} = useSnippetStore()
 	const {
 		hosts,
@@ -77,8 +84,6 @@ export default function TerminalScreen() {
 	 */
 	const startupCommandRef = useRef<string | null>(null)
 	const prevConnectedRef = useRef(false)
-
-	const isConnected = service.isConnected()
 
 	// Trigger startup command when connection becomes active.
 	useEffect(() => {
@@ -409,6 +414,10 @@ export default function TerminalScreen() {
 
 						{settings.authMode === 'key' ? (
 							<>
+								<Text style={[ts, styles.authHint]}>
+									Paste an existing OpenSSH private key. Generation and provider
+									sync will be added later.
+								</Text>
 								<Text style={[ts, styles.fieldLabel]}>Private Key</Text>
 								<TextInput
 									value={settings.privateKey}
@@ -740,6 +749,7 @@ const styles = StyleSheet.create({
 	},
 	authModeChipLabel: {color: '#a1a1aa', fontSize: 12, fontWeight: '600'},
 	authModeChipLabelActive: {color: '#ffffff'},
+	authHint: {color: '#71717a', fontSize: 12, lineHeight: 18, marginTop: 6},
 	keyInput: {
 		minHeight: 120,
 		textAlignVertical: 'top',

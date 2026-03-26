@@ -365,6 +365,10 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 								</FormField>
 							) : (
 								<>
+									<Text style={styles.authHint}>
+										Paste an existing OpenSSH private key. In-app key generation
+										and provider integrations will be added in a later step.
+									</Text>
 									<FormField
 										label="Private Key"
 										required
@@ -687,6 +691,12 @@ const styles = StyleSheet.create({
 	segmentActive: {backgroundColor: '#6366f1'},
 	segmentLabel: {color: '#71717a', fontSize: 11, fontWeight: '600'},
 	segmentLabelActive: {color: '#ffffff'},
+	authHint: {
+		color: '#71717a',
+		fontSize: 12,
+		lineHeight: 18,
+		marginTop: 6,
+	},
 	footer: {
 		flexDirection: 'row',
 		gap: 12,

@@ -125,6 +125,12 @@ Shelly supports two authentication modes in both quick connect and saved profile
 
 Key generation and external providers such as `sshid.io` are not integrated yet. The current implementation supports importing existing key material by pasting it into the profile or quick-connect form.
 
+Planned next steps for SSH key support:
+
+- In-app keypair generation with secure local storage.
+- Cleaner import flows from files, clipboard, or share targets.
+- A future `sshid.io` integration path once the local key-management pipeline is stable.
+
 ## 📜 Available Scripts
 
 - `bun run start:app`: Starts the Expo development server in LAN mode.
@@ -134,6 +140,8 @@ Key generation and external providers such as `sshid.io` are not integrated yet.
 - `bun run typecheck`: Runs TypeScript compiler checks.
 - `bun run lint`: Checks code for style and errors with ESLint.
 - `bun run format`: Formats the codebase using Prettier.
+
+`bun run check:app` keeps `expo install --check` in the validation path, but treats Expo Doctor as advisory. This repo keeps `apps/mobile/android/` in the workspace, so Doctor can warn about non-CNG config sync, and Bun installs can occasionally trigger duplicate-native-module warnings in `node_modules` even when app code is unchanged.
 
 ## 🛠️ Configuration
 

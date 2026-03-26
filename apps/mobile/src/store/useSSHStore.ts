@@ -8,6 +8,7 @@ interface SSHState {
 	service: ISSHService
 	output: string
 	isConnecting: boolean
+	isConnected: boolean
 	error: string | null
 
 	// Actions
@@ -44,21 +45,23 @@ export const useSSHStore = create<SSHState>(set => {
 		service,
 		output: '',
 		isConnecting: false,
+		isConnected: false,
 		error: null,
 
 		connect: async (config: SSHConfig) => {
-			set({isConnecting: true, error: null, output: ''})
+			set({isConnecting: true, isConnected: false, error: null, output: ''})
 			try {
 				await service.connect(config)
-				set({isConnecting: false})
+				set({isConnecting: false, isConnected: true})
 			} catch (e: unknown) {
 				const message = e instanceof Error ? e.message : 'Unknown error'
-				set({isConnecting: false, error: message})
+				set({isConnecting: false, isConnected: false, error: message})
 			}
 		},
 
 		disconnect: async () => {
 			await service.disconnect()
+			set({isConnecting: false, isConnected: false, error: null})
 		},
 
 		sendData: async (data: string) => {

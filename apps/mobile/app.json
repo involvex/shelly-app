@@ -20,6 +20,7 @@
 		"expo-web-browser",
 		"expo-secure-store",
 		"expo-font",
+		"expo-dev-client",
 		"./plugins/with-bouncycastle-fix"
 	],
 	"android": {

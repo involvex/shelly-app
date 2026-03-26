@@ -67,7 +67,6 @@ const SSH_PORT = 22
 type ScanRange = {
 	label: string
 	hosts: string[]
-	isFallback: boolean
 }
 
 function unavailableRuntimeMessage(params: {
@@ -112,7 +111,6 @@ function buildScanRange(ip: string): ScanRange | null {
 	return {
 		label: `${base}.x`,
 		hosts,
-		isFallback: true,
 	}
 }
 
@@ -264,11 +262,6 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 			console.log(
 				`[Discovery] Device IP: ${deviceIp} — scanning ${range.label} on port ${SSH_PORT}`,
 			)
-			if (range.isFallback) {
-				console.log(
-					'[Discovery] Subnet mask unavailable from Expo runtime. Falling back to /24 scan.',
-				)
-			}
 
 			set({scanSubnet: range.label, scanTotal: range.hosts.length})
 

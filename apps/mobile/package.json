@@ -5,9 +5,10 @@
 	"main": "expo-router/entry",
 	"scripts": {
 		"android": "expo run:android",
-		"check": "bun run prebuild && bun run expo:check && bun run doctor",
+		"check": "bun run prebuild && bun run expo:check && bun run doctor:advisory",
 		"deploy": "bunx expo export -p web && bunx eas-cli@latest deploy",
 		"doctor": "bunx expo-doctor --verbose",
+		"doctor:advisory": "bunx expo-doctor --verbose || true",
 		"expo:check": "bunx expo install --check",
 		"expo:prebuild": "bun run prebuild && expo prebuild",
 		"format": "prettier . --write",
