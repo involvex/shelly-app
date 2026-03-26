@@ -17,7 +17,9 @@
 		"lint:fix": "eslint src --fix",
 		"patch:ssh-sftp-gradle": "bun ./scripts/patch-ssh-sftp-gradle.ts",
 		"prebuild": "bun run format && bun run lint:fix && bun run typecheck",
-		"start": "expo start",
+		"start": "expo start --host lan",
+		"start:lan": "expo start --host lan --clear",
+		"start:tunnel": "expo start --host tunnel --clear",
 		"typecheck": "tsc --noEmit",
 		"web": "expo start --web"
 	},

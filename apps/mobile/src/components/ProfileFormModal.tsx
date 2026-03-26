@@ -10,10 +10,12 @@ import {
 	View,
 } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import type {SSHProfileSecrets} from '../store/useSSHProfiles'
 import {SafeAreaView} from 'react-native-safe-area-context'
 import type {SSHProfile} from '../store/useSSHProfiles'
 import {PROFILE_COLORS} from '../theme/terminal'
 import React, {useEffect, useState} from 'react'
+import type {SSHAuthMode} from '@shelly/shared'
 import {scaleText} from 'react-native-text'
 
 const ts = scaleText({fontSize: 14})
@@ -24,12 +26,15 @@ type TerminalType = (typeof TERMINAL_TYPES)[number]
 interface ProfileFormModalProps {
 	visible: boolean
 	onClose: () => void
-	/** Called with the new/updated profile data and password.  Throw to show an error. */
-	onSave: (profile: Omit<SSHProfile, 'id'>, password: string) => Promise<void>
+	/** Called with the new/updated profile data and secrets. Throw to show an error. */
+	onSave: (
+		profile: Omit<SSHProfile, 'id'>,
+		secrets: SSHProfileSecrets,
+	) => Promise<void>
 	/** When provided the form opens pre-populated for editing. */
 	initialProfile?: SSHProfile
-	/** Current saved password for an existing profile. */
-	initialPassword?: string
+	/** Current saved secrets for an existing profile. */
+	initialSecrets?: SSHProfileSecrets
 }
 
 interface FormState {
@@ -38,8 +43,13 @@ interface FormState {
 	host: string
 	port: string
 	user: string
+	authMode: SSHAuthMode
 	password: string
+	privateKey: string
+	keyPassphrase: string
 	showPassword: boolean
+	showPrivateKey: boolean
+	showKeyPassphrase: boolean
 	terminalType: string
 	startupCommand: string
 	color: string
@@ -52,8 +62,13 @@ const EMPTY: FormState = {
 	host: '',
 	port: '22',
 	user: '',
+	authMode: 'password',
 	password: '',
+	privateKey: '',
+	keyPassphrase: '',
 	showPassword: false,
+	showPrivateKey: false,
+	showKeyPassphrase: false,
 	terminalType: 'xterm-256color',
 	startupCommand: '',
 	color: PROFILE_COLORS[0],
@@ -78,7 +93,7 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 	onClose,
 	onSave,
 	initialProfile,
-	initialPassword = '',
+	initialSecrets,
 }) => {
 	const isEditing = !!initialProfile
 	const [form, setForm] = useState<FormState>(EMPTY)
@@ -98,7 +113,10 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 				host: initialProfile.host,
 				port: initialProfile.port,
 				user: initialProfile.user,
-				password: initialPassword,
+				authMode: initialProfile.authMode ?? 'password',
+				password: initialSecrets?.password ?? '',
+				privateKey: initialSecrets?.privateKey ?? '',
+				keyPassphrase: initialSecrets?.keyPassphrase ?? '',
 				terminalType: initialProfile.terminalType ?? 'xterm-256color',
 				startupCommand: initialProfile.startupCommand ?? '',
 				color: initialProfile.color ?? PROFILE_COLORS[0],
@@ -108,7 +126,7 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 		}
 		setErrors({})
 		setSaving(false)
-	}, [visible, initialProfile, initialPassword])
+	}, [visible, initialProfile, initialSecrets])
 
 	const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
 		setForm(prev => ({...prev, [key]: value}))
@@ -120,6 +138,9 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 		const port = parseInt(form.port, 10)
 		if (isNaN(port) || port < 1 || port > 65535) errs.port = '1–65535'
 		if (!form.user.trim()) errs.user = 'Username is required'
+		if (form.authMode === 'key' && !form.privateKey.trim()) {
+			errs.privateKey = 'Private key is required'
+		}
 		setErrors(errs)
 		return Object.keys(errs).length === 0
 	}
@@ -135,11 +156,16 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 					host: form.host.trim(),
 					port: form.port.trim() || '22',
 					user: form.user.trim(),
+					authMode: form.authMode,
 					terminalType: form.terminalType as TerminalType,
 					startupCommand: form.startupCommand.trim() || undefined,
 					color: form.color,
 				},
-				form.password,
+				{
+					password: form.password,
+					privateKey: form.privateKey,
+					keyPassphrase: form.keyPassphrase,
+				},
 			)
 			onClose()
 		} catch {
@@ -282,34 +308,136 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 								/>
 							</FormField>
 
-							{/* Password */}
-							<FormField label="Password">
-								<View style={styles.passwordRow}>
-									<TextInput
-										value={form.password}
-										onChangeText={v => set('password', v)}
-										secureTextEntry={!form.showPassword}
-										placeholder="••••••••"
-										placeholderTextColor="#4b5563"
-										style={[styles.input, styles.flex]}
-										accessibilityLabel="SSH password"
-									/>
-									<TouchableOpacity
-										onPress={() => set('showPassword', !form.showPassword)}
-										style={styles.eyeBtn}
-										accessibilityLabel={
-											form.showPassword ? 'Hide password' : 'Show password'
-										}
-										accessibilityRole="button"
-									>
-										<MaterialCommunityIcons
-											name={form.showPassword ? 'eye-off' : 'eye'}
-											size={20}
-											color="#6b7280"
-										/>
-									</TouchableOpacity>
+							<FormField label="Authentication">
+								<View style={styles.segmentRow}>
+									{(['password', 'key'] as const).map(mode => (
+										<TouchableOpacity
+											key={mode}
+											onPress={() => set('authMode', mode)}
+											style={[
+												styles.segment,
+												form.authMode === mode && styles.segmentActive,
+											]}
+											accessibilityRole="radio"
+											accessibilityState={{selected: form.authMode === mode}}
+										>
+											<Text
+												style={[
+													ts,
+													styles.segmentLabel,
+													form.authMode === mode && styles.segmentLabelActive,
+												]}
+											>
+												{mode === 'password' ? 'Password' : 'SSH Key'}
+											</Text>
+										</TouchableOpacity>
+									))}
 								</View>
 							</FormField>
+
+							{form.authMode === 'password' ? (
+								<FormField label="Password">
+									<View style={styles.passwordRow}>
+										<TextInput
+											value={form.password}
+											onChangeText={v => set('password', v)}
+											secureTextEntry={!form.showPassword}
+											placeholder="••••••••"
+											placeholderTextColor="#4b5563"
+											style={[styles.input, styles.flex]}
+											accessibilityLabel="SSH password"
+										/>
+										<TouchableOpacity
+											onPress={() => set('showPassword', !form.showPassword)}
+											style={styles.eyeBtn}
+											accessibilityLabel={
+												form.showPassword ? 'Hide password' : 'Show password'
+											}
+											accessibilityRole="button"
+										>
+											<MaterialCommunityIcons
+												name={form.showPassword ? 'eye-off' : 'eye'}
+												size={20}
+												color="#6b7280"
+											/>
+										</TouchableOpacity>
+									</View>
+								</FormField>
+							) : (
+								<>
+									<FormField
+										label="Private Key"
+										required
+										error={errors.privateKey}
+									>
+										<View style={styles.passwordRow}>
+											<TextInput
+												value={form.privateKey}
+												onChangeText={v => set('privateKey', v)}
+												secureTextEntry={!form.showPrivateKey}
+												placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+												placeholderTextColor="#4b5563"
+												multiline
+												style={[
+													styles.input,
+													styles.flex,
+													styles.textAreaInput,
+												]}
+												accessibilityLabel="SSH private key"
+											/>
+											<TouchableOpacity
+												onPress={() =>
+													set('showPrivateKey', !form.showPrivateKey)
+												}
+												style={styles.eyeBtn}
+												accessibilityLabel={
+													form.showPrivateKey
+														? 'Hide private key'
+														: 'Show private key'
+												}
+												accessibilityRole="button"
+											>
+												<MaterialCommunityIcons
+													name={form.showPrivateKey ? 'eye-off' : 'eye'}
+													size={20}
+													color="#6b7280"
+												/>
+											</TouchableOpacity>
+										</View>
+									</FormField>
+									<FormField label="Key Passphrase">
+										<View style={styles.passwordRow}>
+											<TextInput
+												value={form.keyPassphrase}
+												onChangeText={v => set('keyPassphrase', v)}
+												secureTextEntry={!form.showKeyPassphrase}
+												placeholder="Optional passphrase"
+												placeholderTextColor="#4b5563"
+												style={[styles.input, styles.flex]}
+												accessibilityLabel="SSH key passphrase"
+											/>
+											<TouchableOpacity
+												onPress={() =>
+													set('showKeyPassphrase', !form.showKeyPassphrase)
+												}
+												style={styles.eyeBtn}
+												accessibilityLabel={
+													form.showKeyPassphrase
+														? 'Hide key passphrase'
+														: 'Show key passphrase'
+												}
+												accessibilityRole="button"
+											>
+												<MaterialCommunityIcons
+													name={form.showKeyPassphrase ? 'eye-off' : 'eye'}
+													size={20}
+													color="#6b7280"
+												/>
+											</TouchableOpacity>
+										</View>
+									</FormField>
+								</>
+							)}
 
 							{/* Advanced section toggle */}
 							<TouchableOpacity
@@ -520,6 +648,11 @@ const styles = StyleSheet.create({
 		paddingVertical: Platform.OS === 'ios' ? 11 : 9,
 		color: '#f4f4f5',
 		fontSize: 15,
+	},
+	textAreaInput: {
+		minHeight: 120,
+		textAlignVertical: 'top',
+		fontFamily: 'monospace',
 	},
 	inputError: {borderColor: '#f87171'},
 	errorMsg: {color: '#f87171', fontSize: 11, marginTop: 4},

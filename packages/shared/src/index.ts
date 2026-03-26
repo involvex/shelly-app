@@ -1,14 +1,25 @@
 export const SharedConstant = 'Shelly Shared'
 
+export type SSHAuthMode = 'password' | 'key'
+
+export interface SSHPasswordAuth {
+	type: 'password'
+	value: string
+}
+
+export interface SSHKeyAuth {
+	type: 'key'
+	value: string
+	keyPassphrase?: string
+}
+
+export type SSHAuthConfig = SSHPasswordAuth | SSHKeyAuth
+
 export interface SSHConfig {
 	host: string
 	port: number
 	user: string
-	auth: {
-		type: 'password' | 'key'
-		value: string // Password or Private Key content
-		keyPassphrase?: string
-	}
+	auth: SSHAuthConfig
 	keepAliveInterval?: number
 }
 

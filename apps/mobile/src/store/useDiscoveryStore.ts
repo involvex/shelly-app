@@ -48,6 +48,8 @@ interface DiscoveryState {
 	isScanning: boolean
 	/** True when native discovery dependencies are available in the current runtime. */
 	isAvailable: boolean
+	/** Active subnet description shown in diagnostics and scan results. */
+	scanSubnet: string | null
 	/** Number of addresses probed so far in the current scan. */
 	scanProgress: number
 	/** Total addresses to probe (set at scan start). */
@@ -58,9 +60,15 @@ interface DiscoveryState {
 	stopScan: () => void
 }
 
-const BATCH_SIZE = 30
-const PROBE_TIMEOUT = 1200
+const BATCH_SIZE = 24
+const PROBE_TIMEOUT = 2200
 const SSH_PORT = 22
+
+type ScanRange = {
+	label: string
+	hosts: string[]
+	isFallback: boolean
+}
 
 function unavailableRuntimeMessage(params: {
 	platform: string
@@ -89,6 +97,23 @@ function subnetBase(ip: string): string | null {
 	const parts = ip.split('.')
 	if (parts.length !== 4) return null
 	return `${parts[0]}.${parts[1]}.${parts[2]}`
+}
+
+function buildScanRange(ip: string): ScanRange | null {
+	const base = subnetBase(ip)
+	if (!base) return null
+
+	const hosts: string[] = []
+	for (let i = 1; i <= 254; i++) {
+		const host = `${base}.${i}`
+		if (host !== ip) hosts.push(host)
+	}
+
+	return {
+		label: `${base}.x`,
+		hosts,
+		isFallback: true,
+	}
 }
 
 function probePort(
@@ -160,6 +185,7 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 		hosts: [],
 		isScanning: false,
 		isAvailable: unavailableMessage == null,
+		scanSubnet: null,
 		scanProgress: 0,
 		scanTotal: 0,
 		scanError: unavailableMessage,
@@ -172,6 +198,7 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 			set({
 				isScanning: true,
 				hosts: [],
+				scanSubnet: null,
 				scanProgress: 0,
 				scanTotal: 0,
 				scanError: null,
@@ -225,8 +252,8 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 				return
 			}
 
-			const base = subnetBase(deviceIp)
-			if (!base) {
+			const range = buildScanRange(deviceIp)
+			if (!range) {
 				set({
 					isScanning: false,
 					scanError: 'Unrecognized IP format: ' + deviceIp,
@@ -235,21 +262,21 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 			}
 
 			console.log(
-				`[Discovery] Device IP: ${deviceIp} — scanning ${base}.1–254 on port ${SSH_PORT}`,
+				`[Discovery] Device IP: ${deviceIp} — scanning ${range.label} on port ${SSH_PORT}`,
 			)
-
-			const candidates: string[] = []
-			for (let i = 1; i <= 254; i++) {
-				const ip = `${base}.${i}`
-				if (ip !== deviceIp) candidates.push(ip)
+			if (range.isFallback) {
+				console.log(
+					'[Discovery] Subnet mask unavailable from Expo runtime. Falling back to /24 scan.',
+				)
 			}
-			set({scanTotal: candidates.length})
+
+			set({scanSubnet: range.label, scanTotal: range.hosts.length})
 
 			let scanned = 0
 			let totalFound = 0
-			for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+			for (let i = 0; i < range.hosts.length; i += BATCH_SIZE) {
 				if (localCtrl.aborted) break
-				const batch = candidates.slice(i, i + BATCH_SIZE)
+				const batch = range.hosts.slice(i, i + BATCH_SIZE)
 				const results = await Promise.all(
 					batch.map(async host => ({
 						host,
@@ -276,16 +303,17 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 
 			if (!localCtrl.aborted) {
 				console.log(
-					`[Discovery] Scan complete — subnet ${base}.x, found: ${totalFound} host(s)`,
+					`[Discovery] Scan complete — subnet ${range.label}, found: ${totalFound} host(s)`,
 				)
 				set(state => ({
 					isScanning: false,
 					scanError:
 						state.hosts.length === 0
-							? `Scanned ${base}.1–254, no SSH devices found.\n` +
+							? `Scanned ${range.label}, no reachable SSH devices were found on port ${SSH_PORT}.\n` +
+								`• This build uses a fallback /24 scan because Expo did not expose the subnet mask\n` +
 								`• Check Windows Firewall allows port 22 inbound\n` +
 								`• Ensure router AP isolation is off\n` +
-								`• Confirm phone & PC are on the same subnet (${base}.x)`
+								`• Confirm phone & PC are on the same subnet (${range.label})`
 							: null,
 				}))
 			}

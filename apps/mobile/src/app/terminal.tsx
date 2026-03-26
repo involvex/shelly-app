@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context'
+import type {SSHProfile, SSHProfileSecrets} from '../store/useSSHProfiles'
 import {SnippetManagerModal} from '../components/SnippetManagerModal'
 import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {ProfileFormModal} from '../components/ProfileFormModal'
@@ -18,7 +19,6 @@ import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
 import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
-import type {SSHProfile} from '../store/useSSHProfiles'
 import {useSSHProfiles} from '../store/useSSHProfiles'
 import {useAppSettings} from '../store/useAppSettings'
 import {useSSHSettings} from '../hooks/useSSHSettings'
@@ -39,6 +39,7 @@ export default function TerminalScreen() {
 		hosts,
 		isScanning,
 		isAvailable: isDiscoveryAvailable,
+		scanSubnet,
 		scanProgress,
 		scanTotal,
 		scanError,
@@ -52,7 +53,7 @@ export default function TerminalScreen() {
 		add: addProfile,
 		update: updateProfile,
 		remove: removeProfile,
-		getPassword,
+		getSecrets,
 	} = useSSHProfiles()
 
 	const {colors, colorScheme} = useColorScheme()
@@ -64,7 +65,11 @@ export default function TerminalScreen() {
 	const [isSnippetsVisible, setSnippetsVisible] = useState(false)
 	const [profileFormVisible, setProfileFormVisible] = useState(false)
 	const [editingProfile, setEditingProfile] = useState<SSHProfile | undefined>()
-	const [editingPassword, setEditingPassword] = useState('')
+	const [editingSecrets, setEditingSecrets] = useState<SSHProfileSecrets>({
+		password: '',
+		privateKey: '',
+		keyPassphrase: '',
+	})
 
 	/**
 	 * After connecting, we send this startup command (if any) once with a short
@@ -132,43 +137,53 @@ export default function TerminalScreen() {
 			host: settings.host,
 			port,
 			user: settings.user,
-			auth: {type: 'password', value: settings.password},
+			auth:
+				settings.authMode === 'key'
+					? {
+							type: 'key',
+							value: settings.privateKey,
+							keyPassphrase: settings.keyPassphrase || undefined,
+						}
+					: {type: 'password', value: settings.password},
 		})
 	}
 
 	const handleSelectProfile = async (id: string) => {
 		const p = profiles.find(x => x.id === id)
 		if (!p) return
-		const pw = await getPassword(id)
+		const secrets = await getSecrets(id)
 		updateSetting('host', p.host)
 		updateSetting('port', p.port)
 		updateSetting('user', p.user)
-		updateSetting('password', pw)
+		updateSetting('authMode', p.authMode ?? 'password')
+		updateSetting('password', secrets.password)
+		updateSetting('privateKey', secrets.privateKey)
+		updateSetting('keyPassphrase', secrets.keyPassphrase)
 		// Stash the startup command to send after connecting.
 		startupCommandRef.current = p.startupCommand ?? null
 	}
 
 	const handleOpenAddProfile = () => {
 		setEditingProfile(undefined)
-		setEditingPassword('')
+		setEditingSecrets({password: '', privateKey: '', keyPassphrase: ''})
 		setProfileFormVisible(true)
 	}
 
 	const handleOpenEditProfile = async (profile: SSHProfile) => {
-		const pw = await getPassword(profile.id)
+		const secrets = await getSecrets(profile.id)
 		setEditingProfile(profile)
-		setEditingPassword(pw)
+		setEditingSecrets(secrets)
 		setProfileFormVisible(true)
 	}
 
 	const handleSaveProfile = async (
 		profile: Omit<SSHProfile, 'id'>,
-		password: string,
+		secrets: SSHProfileSecrets,
 	) => {
 		if (editingProfile) {
-			await updateProfile(editingProfile.id, profile, password)
+			await updateProfile(editingProfile.id, profile, secrets)
 		} else {
-			await addProfile(profile, password)
+			await addProfile(profile, secrets)
 		}
 	}
 
@@ -365,16 +380,72 @@ export default function TerminalScreen() {
 							accessibilityLabel="SSH username"
 						/>
 
-						<Text style={[ts, styles.fieldLabel]}>Password</Text>
-						<TextInput
-							value={settings.password}
-							onChangeText={v => updateSetting('password', v)}
-							secureTextEntry
-							placeholder="••••••••"
-							placeholderTextColor="#555"
-							style={[ts, styles.input]}
-							accessibilityLabel="SSH password"
-						/>
+						<Text style={[ts, styles.fieldLabel]}>Authentication</Text>
+						<View style={styles.authModeRow}>
+							{(['password', 'key'] as const).map(mode => (
+								<TouchableOpacity
+									key={mode}
+									onPress={() => updateSetting('authMode', mode)}
+									style={[
+										styles.authModeChip,
+										settings.authMode === mode && styles.authModeChipActive,
+									]}
+									accessibilityRole="button"
+									accessibilityLabel={`Use ${mode === 'password' ? 'password' : 'SSH key'} authentication`}
+								>
+									<Text
+										style={[
+											ts,
+											styles.authModeChipLabel,
+											settings.authMode === mode &&
+												styles.authModeChipLabelActive,
+										]}
+									>
+										{mode === 'password' ? 'Password' : 'SSH Key'}
+									</Text>
+								</TouchableOpacity>
+							))}
+						</View>
+
+						{settings.authMode === 'key' ? (
+							<>
+								<Text style={[ts, styles.fieldLabel]}>Private Key</Text>
+								<TextInput
+									value={settings.privateKey}
+									onChangeText={v => updateSetting('privateKey', v)}
+									secureTextEntry
+									multiline
+									placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+									placeholderTextColor="#555"
+									style={[ts, styles.input, styles.keyInput]}
+									accessibilityLabel="SSH private key"
+								/>
+
+								<Text style={[ts, styles.fieldLabel]}>Key Passphrase</Text>
+								<TextInput
+									value={settings.keyPassphrase}
+									onChangeText={v => updateSetting('keyPassphrase', v)}
+									secureTextEntry
+									placeholder="Optional passphrase"
+									placeholderTextColor="#555"
+									style={[ts, styles.input]}
+									accessibilityLabel="SSH key passphrase"
+								/>
+							</>
+						) : (
+							<>
+								<Text style={[ts, styles.fieldLabel]}>Password</Text>
+								<TextInput
+									value={settings.password}
+									onChangeText={v => updateSetting('password', v)}
+									secureTextEntry
+									placeholder="••••••••"
+									placeholderTextColor="#555"
+									style={[ts, styles.input]}
+									accessibilityLabel="SSH password"
+								/>
+							</>
+						)}
 
 						{error != null && error !== '' && (
 							<Text style={[ts, styles.errorText]}>{error}</Text>
@@ -420,7 +491,7 @@ export default function TerminalScreen() {
 							<Text style={[ts, styles.sectionLabel]}>Local Devices</Text>
 							{isScanning ? (
 								<Text style={[ts, styles.scanningLabel]}>
-									Scanning…
+									Scanning{scanSubnet ? ` ${scanSubnet}` : ''}…
 									{scanTotal > 0 ? ` (${scanProgress}/${scanTotal})` : ''}
 								</Text>
 							) : (
@@ -457,7 +528,8 @@ export default function TerminalScreen() {
 						)}
 						{!isScanning && hosts.length === 0 && scanError == null && (
 							<Text style={[ts, styles.noDevicesText]}>
-								No SSH devices found on this network.
+								No reachable SSH devices found
+								{scanSubnet ? ` on ${scanSubnet}` : ' on this network'}.
 							</Text>
 						)}
 					</View>
@@ -469,7 +541,7 @@ export default function TerminalScreen() {
 					onClose={() => setProfileFormVisible(false)}
 					onSave={handleSaveProfile}
 					initialProfile={editingProfile}
-					initialPassword={editingPassword}
+					initialSecrets={editingSecrets}
 				/>
 			</SafeAreaView>
 		)
@@ -652,6 +724,26 @@ const styles = StyleSheet.create({
 		paddingVertical: Platform.OS === 'ios' ? 11 : 9,
 		color: '#f4f4f5',
 		fontSize: 14,
+	},
+	authModeRow: {flexDirection: 'row', gap: 8, marginBottom: 4},
+	authModeChip: {
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderRadius: 999,
+		borderWidth: 1,
+		borderColor: '#3f3f46',
+		backgroundColor: '#18181b',
+	},
+	authModeChipActive: {
+		backgroundColor: '#312e81',
+		borderColor: '#6366f1',
+	},
+	authModeChipLabel: {color: '#a1a1aa', fontSize: 12, fontWeight: '600'},
+	authModeChipLabelActive: {color: '#ffffff'},
+	keyInput: {
+		minHeight: 120,
+		textAlignVertical: 'top',
+		fontFamily: 'monospace',
 	},
 	errorText: {color: '#f87171', fontSize: 12, marginTop: 6},
 	connectBtn: {
