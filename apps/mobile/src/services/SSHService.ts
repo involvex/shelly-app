@@ -86,12 +86,26 @@ export class SSHService implements ISSHService {
 	}
 
 	async disconnect(): Promise<void> {
-		if (this.client) {
-			this.client.closeShell()
-			this.client.disconnect()
-			this.client = null
-		}
+		const currentClient = this.client
+
+		// Clear JS-visible connection state first so the app can always return to
+		// the connection screen even if the native library errors during teardown.
+		this.client = null
 		this._isConnected = false
+
+		if (!currentClient) {
+			return
+		}
+
+		try {
+			await Promise.resolve(currentClient.disconnect())
+		} catch (err: unknown) {
+			this.emitError(
+				err instanceof Error
+					? err
+					: new Error('SSH disconnect failed while closing the session.'),
+			)
+		}
 	}
 
 	async write(data: string): Promise<void> {

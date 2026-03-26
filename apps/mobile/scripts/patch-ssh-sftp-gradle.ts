@@ -10,18 +10,104 @@ const buildGradlePath = join(
 	'android',
 	'build.gradle',
 )
+const nativeModulePath = join(
+	dirname(packageJsonPath),
+	'android',
+	'src',
+	'main',
+	'java',
+	'me',
+	'keeex',
+	'rnssh',
+	'RNSshClientModule.java',
+)
 const originalContents = readFileSync(buildGradlePath, 'utf8')
+const nativeModuleContents = readFileSync(nativeModulePath, 'utf8')
 
-if (!originalContents.includes('jcenter()')) {
+const legacyDisconnectBlock = `  @ReactMethod
+	public void disconnect(final String key) {
+		this.closeShell(key);
+		this.disconnectSFTP(key);
+
+		SSHClient client = clientPool.get(key);
+		if (client != null) {
+				client._session.disconnect();
+		}
+	}`
+
+const patchedDisconnectBlock = `  @ReactMethod
+	public void disconnect(final String key) {
+		new Thread(new Runnable()  {
+			public void run() {
+				SSHClient client = clientPool.get(key);
+				if (client == null) {
+						return;
+				}
+
+				try {
+					if (client._channel != null) {
+						client._channel.disconnect();
+						client._channel = null;
+					}
+
+					if (client._dataOutputStream != null) {
+						client._dataOutputStream.flush();
+						client._dataOutputStream.close();
+						client._dataOutputStream = null;
+					}
+
+					if (client._bufferedReader != null) {
+						client._bufferedReader.close();
+						client._bufferedReader = null;
+					}
+				} catch (IOException error) {
+					Log.e(LOGTAG, "Error closing shell during disconnect:" + error.getMessage());
+				} catch (Exception error) {
+					Log.e(LOGTAG, "Error closing shell during disconnect:" + error.getMessage());
+				}
+
+				try {
+					if (client._sftpSession != null) {
+						client._sftpSession.disconnect();
+						client._sftpSession = null;
+					}
+				} catch (Exception error) {
+					Log.e(LOGTAG, "Error disconnecting SFTP during disconnect:" + error.getMessage());
+				}
+
+				try {
+					if (client._session != null && client._session.isConnected()) {
+						client._session.disconnect();
+					}
+				} catch (Exception error) {
+					Log.e(LOGTAG, "Error disconnecting SSH session:" + error.getMessage());
+				}
+
+				clientPool.remove(key);
+			}
+		}).start();
+	}`
+
+let nextNativeModuleContents = nativeModuleContents
+
+if (nativeModuleContents.includes(legacyDisconnectBlock)) {
+	nextNativeModuleContents = nativeModuleContents.replace(
+		legacyDisconnectBlock,
+		patchedDisconnectBlock,
+	)
+}
+
+if (
+	!originalContents.includes('jcenter()') &&
+	nextNativeModuleContents === nativeModuleContents
+) {
 	if (!originalContents.includes('mavenCentral()')) {
 		throw new Error(
 			`Expected mavenCentral() in ${buildGradlePath}, but it was not found.`,
 		)
 	}
 
-	console.log(
-		`SSH/SFTP Gradle repositories already normalized: ${buildGradlePath}`,
-	)
+	console.log(`SSH/SFTP dependency patches already applied: ${buildGradlePath}`)
 	process.exit(0)
 }
 
@@ -38,4 +124,8 @@ if (updatedContents.includes('jcenter()')) {
 
 writeFileSync(buildGradlePath, updatedContents)
 
-console.log(`Patched SSH/SFTP Gradle repositories: ${buildGradlePath}`)
+if (nextNativeModuleContents !== nativeModuleContents) {
+	writeFileSync(nativeModulePath, nextNativeModuleContents)
+}
+
+console.log(`Patched SSH/SFTP dependency files: ${buildGradlePath}`)

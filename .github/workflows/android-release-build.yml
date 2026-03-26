@@ -1,128 +1,31 @@
-# =============================================================================
-# Android Release APK Build
-# =============================================================================
-#
-# PURPOSE
-# -------
-# Builds a release APK for the Expo React Native app at apps/mobile and stores
-# it as a downloadable workflow artifact. The current Android config signs the
-# release build with the debug keystore, which is suitable for CI validation
-# and device testing but not for Play Store distribution.
-#
-# MONOREPO CONTEXT
-# ----------------
-# • Root package manager : Bun workspaces (apps/*, packages/*)
-# • Mobile workspace     : apps/mobile  (@shelly/mobile, Expo 55, RN 0.83.2)
-# • Shared workspace     : packages/shared  (@shelly/shared)
-# • Android package ID   : com.involvex.shelly
-#
-# CRITICAL DESIGN NOTE — Gradle caches placed AFTER expo prebuild
-# ---------------------------------------------------------------
-# The apps/mobile/android/ directory is NOT committed to git. It is generated
-# at build-time by `expo prebuild`. Because the *.gradle* files don't exist
-# before that step, any cache key derived from them would be invalid at job
-# start. Gradle cache restore/save steps are therefore placed AFTER prebuild
-# so that cache keys always reference real files.
-#
-# APK OUTPUT
-# ----------
-# apps/mobile/android/app/build/outputs/apk/release/*.apk
-#
-# =============================================================================
-
 name: Build Android Release APK
 
-# ─── Triggers ────────────────────────────────────────────────────────────────
 on:
-  # Run on every push to the primary branch. Acts as the final gate that
-  # confirms the merged state still produces a valid release APK.
   push:
     branches: [main]
-    # Also trigger on version tags so the release job can create a GitHub Release
-    # from the built APK. Push a tag with `git tag vX.Y.Z && git push --tags`.
     tags:
       - 'v*.*.*'
-
-  # Run on every pull-request targeting main. Validates the feature branch
-  # before the author or reviewer can merge it.
   pull_request:
     branches: [main]
 
-  # Allow triggering a build manually from the GitHub Actions UI ("Run workflow"
-  # button). Useful for ad-hoc testing of a specific branch without opening a PR.
   workflow_dispatch:
 
-# ─── Concurrency ─────────────────────────────────────────────────────────────
-# If a new push or PR update arrives while a build is already running for the
-# same ref, cancel the older run and start fresh. This prevents queuing
-# multiple redundant builds and conserves CI minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# ─── Permissions ─────────────────────────────────────────────────────────────
-# Grant only what this workflow needs. It reads repository contents to check
-# out the code; no writes to the repo, packages, or any other resource are
-# required. Restricting permissions limits the blast radius if an action or
-# script in this workflow is compromised.
 permissions:
   contents: read
 
-# ─── Jobs ────────────────────────────────────────────────────────────────────
 jobs:
   build-android-apk:
     name: Build Android Release APK
-
-    # ubuntu-latest provides:
-    #   • Android SDK pre-installed at /usr/local/lib/android/sdk
-    #   • ANDROID_HOME and ANDROID_SDK_ROOT environment variables pre-set
-    #   • NDK 27.x (required by React Native's JSI layer)
-    #   • CMake 3.22.x
-    # Using the hosted runner means zero self-hosted maintenance overhead.
     runs-on: ubuntu-latest
-
-    # Safety net: cancel the job if it runs longer than 45 minutes.
-    # • First uncached build: ~30–35 min (Gradle downloads + full compile)
-    # • Subsequent cached builds: ~8–12 min
-    # Without this limit a network stall or infinite loop would consume all
-    # available CI minutes before GitHub's default 6-hour hard timeout fires.
     timeout-minutes: 45
 
-    # ─── Job-level environment variables ─────────────────────────────────────
     env:
-      # Disable Expo telemetry to prevent analytics HTTP calls during prebuild.
-      # These calls add latency and can fail in restricted network environments,
-      # causing prebuild to exit non-zero even when the project itself is valid.
       EXPO_NO_TELEMETRY: '1'
 
-      # GRADLE_OPTS is read by the Gradle startup script and forwarded as JVM
-      # arguments to the process that runs Gradle itself.
-      #
-      #   daemon=false          — ephemeral CI runners are discarded after each
-      #                           job; there is nothing to gain from a persistent
-      #                           background daemon. Disable it to avoid orphaned
-      #                           processes and reduce peak memory by ~300 MB.
-      #
-      #   parallel=true         — allows Gradle to build independent subprojects
-      #                           concurrently. React Native projects have several
-      #                           (app, react-native, third-party libraries) so
-      #                           this can shave minutes off the build.
-      #
-      #   configureondemand=true — configure only the subprojects that are
-      #                           actually needed for the requested tasks. Reduces
-      #                           configuration phase time for large projects.
-      #
-      #   -Xmx4g                — increase the JVM heap ceiling to 4 GB.
-      #                           The default heap is too small for a full React
-      #                           Native + Expo plugin build and causes OOM
-      #                           errors on the ubuntu-latest 7 GB runner.
-      #
-      #   -XX:MaxMetaspaceSize  — cap the JVM metaspace (class metadata) to
-      #                           512 MB to prevent unbounded metaspace growth
-      #                           from consuming all remaining runner memory.
-      #
-      # YAML >- folded block collapses the indented lines into a single
-      # space-separated string, which is what the JVM flag parser expects.
       GRADLE_OPTS: >-
         -Dorg.gradle.daemon=false
         -Dorg.gradle.parallel=true
@@ -131,73 +34,22 @@ jobs:
         -XX:MaxMetaspaceSize=512m
 
     steps:
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 1 — CHECKOUT
-      # ─────────────────────────────────────────────────────────────────────
-      # fetch-depth: 1 performs a "shallow clone" — only the single HEAD
-      # commit is fetched rather than the complete git history. For a build
-      # job that doesn't perform git log analysis, git blame, or semantic
-      # versioning from tags, this can reduce checkout time from minutes to
-      # seconds on a repo with a long history.
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 2 — SET UP BUN
-      # ─────────────────────────────────────────────────────────────────────
-      # This monorepo uses Bun as its package manager. The oven-sh/setup-bun
-      # action installs the specified Bun version and adds it to PATH so that
-      # subsequent `bun` and `bunx` commands work correctly.
-      #
-      # Using `latest` here tracks the latest stable release. Pin to a
-      # specific version (e.g., bun-version: "1.1.38") if you need
-      # reproducible tooling across runs or are seeing flaky build failures
-      # caused by a Bun regression.
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 3 — SET UP JAVA 17 (TEMURIN)
-      # ─────────────────────────────────────────────────────────────────────
-      # React Native 0.83.2 uses Android Gradle Plugin 8.x which mandates
-      # Java 17 as the minimum JDK version. Attempting to build with Java 11
-      # or lower will produce an immediate Gradle configuration-phase error.
-      #
-      # Temurin (Eclipse Adoptium) is the recommended open-source JDK
-      # distribution for GitHub Actions: it is freely licensed, actively
-      # maintained, and produces identical binaries to Oracle JDK 17.
-      #
-      # WHY `cache: gradle` IS DELIBERATELY OMITTED
-      # The built-in Gradle cache support in setup-java scans for *.gradle*
-      # files at the START of the job (before expo prebuild has generated
-      # the android/ folder). This produces a cache key derived from zero
-      # files — essentially a useless or colliding key. Explicit cache steps
-      # placed after expo prebuild (steps 8-9) handle Gradle caching instead.
       - name: Set up JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 4 — RESTORE BUN DEPENDENCY CACHE
-      # ─────────────────────────────────────────────────────────────────────
-      # Cache the Bun global module store (~/.bun/install/cache) to avoid
-      # re-downloading npm packages on every run.
-      #
-      # Cache key strategy:
-      #   Primary key   : OS + hash of every bun.lock across the workspace.
-      #                   Cache is invalidated only when the lockfile changes.
-      #   Restore key   : OS prefix only. Falls back to the most recently
-      #                   saved cache for this OS if no exact match exists
-      #                   (partial hit — some packages will still be cached).
-      #
-      # The cache action automatically saves the cache at job end when a
-      # cache miss occurred during restore, so no separate save step is needed.
       - name: Restore Bun dependency cache
         uses: actions/cache@v4
         with:
@@ -206,60 +58,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 5 — INSTALL MONOREPO DEPENDENCIES
-      # ─────────────────────────────────────────────────────────────────────
-      # Running `bun install` at the workspace root resolves and installs
-      # all workspace packages in a single pass:
-      #   • packages/shared  — shared utilities required by apps/mobile
-      #   • apps/mobile      — the Expo app and all its native dependencies
-      #
-      # --frozen-lockfile (equivalent to npm ci / yarn install --immutable):
-      #   • Reads bun.lock and installs exact pinned versions — no resolution.
-      #   • Fails with a non-zero exit code if bun.lock is out of sync with
-      #     any package.json in the workspace.
-      #   • Prevents a stale or forgotten lockfile commit from causing
-      #     non-deterministic builds where different runs install different
-      #     package versions silently.
-      #
-      # TROUBLESHOOTING: If this step fails with "lockfile is not up to date",
-      # run `bun install` locally and commit the updated bun.lock file.
       - name: Install monorepo dependencies
         run: bun install --frozen-lockfile
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 5b — NORMALIZE SSH/SFTP GRADLE REPOSITORIES
-      # ─────────────────────────────────────────────────────────────────────
-      # The upstream @dylankenneally/react-native-ssh-sftp package still ships
-      # a Gradle file that references jcenter(), which Gradle 9 removed.
-      # A repo-owned Bun script rewrites that dependency's installed
-      # android/build.gradle file so both GitHub Actions and EAS builds use
-      # mavenCentral() consistently.
-      #
-      # The same script also runs from postinstall for root and workspace
-      # installs, but we re-run it explicitly here as a CI guard so failures
-      # surface before Expo prebuild and Gradle evaluation begin.
       - name: Normalize SSH/SFTP Gradle repositories
         run: bun run -F @shelly/mobile patch:ssh-sftp-gradle
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 6 — VALIDATE ANDROID SDK ENVIRONMENT
-      # ─────────────────────────────────────────────────────────────────────
-      # ubuntu-latest ships with the Android SDK pre-installed. This step
-      # prints diagnostic information before the long expo prebuild step.
-      # Catching a missing SDK path here is ~5 seconds; catching it inside
-      # Gradle is 20+ minutes.
-      #
-      # ANDROID_HOME vs ANDROID_SDK_ROOT: Both point to the same directory.
-      # ANDROID_HOME is the older canonical name; ANDROID_SDK_ROOT is the
-      # newer one. Tools may check either, so both are exported and this
-      # step accepts either.
-      #
-      # COMMON FAILURE: "Neither ANDROID_HOME nor ANDROID_SDK_ROOT is set"
-      # This should not occur on ubuntu-latest. If it does, check whether
-      # the runner image has changed. A workaround is to add:
-      #   ANDROID_HOME: /usr/local/lib/android/sdk
-      # to the job-level env block above.
       - name: Validate Android SDK environment
         run: |
           SDK_PATH="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -286,58 +90,10 @@ jobs:
           echo "=== NDK versions ==="
           ls "$SDK_PATH/ndk" 2>/dev/null | sort || echo "  (none found)"
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 7 — EXPO PREBUILD: GENERATE ANDROID NATIVE PROJECT
-      # ─────────────────────────────────────────────────────────────────────
-      # `expo prebuild` reads app.json (scheme, package ID, plugins, icons,
-      # splash screens) and generates a complete, ready-to-compile Android
-      # Gradle project under apps/mobile/android/. The generated files
-      # include build.gradle.kts, settings.gradle.kts, AndroidManifest.xml,
-      # and the Gradle wrapper.
-      #
-      # The android/ directory is NOT committed to git; it must be regenerated
-      # on every CI run from the canonical app.json configuration.
-      #
-      # Command flags:
-      #   --platform android  — generate Android project only; skip iOS.
-      #                         There is no Xcode on ubuntu-latest, so
-      #                         attempting iOS prebuild would fail immediately.
-      #
-      #   --no-install        — skip the npm/yarn install that Expo runs
-      #                         automatically after project generation. Bun
-      #                         already installed all workspace dependencies
-      #                         in step 5. Running a second package install
-      #                         (with a different package manager) would
-      #                         override the Bun-managed node_modules and
-      #                         potentially introduce version mismatches.
-      #
-      #   --clean             — remove any pre-existing android/ directory
-      #                         before generating a fresh one. Ensures the
-      #                         build is reproducible and not contaminated by
-      #                         a partially-generated directory from a previous
-      #                         interrupted run or a stale cache.
-      #
-      # EXPO_NO_TELEMETRY=1 (set in job env) prevents Expo from making
-      # analytics network requests during prebuild.
-      #
-      # TROUBLESHOOTING:
-      #   • "expo: command not found" — ensure bun install ran first (step 5).
-      #     The expo binary lives in apps/mobile/node_modules/.bin/. `bunx`
-      #     resolves it from the workspace node_modules automatically.
-      #   • Plugin errors — check app.json plugins array and ensure all
-      #     listed plugin packages are installed and compatible with Expo 55.
-      #   • "SDK location not found" — ANDROID_HOME must be set before this
-      #     step. Covered by step 6's validation; if prebuild still can't find
-      #     the SDK, export ANDROID_HOME explicitly in the env block.
       - name: Generate Android native project (expo prebuild)
         working-directory: apps/mobile
         run: bunx expo prebuild --platform android --no-install --clean
 
-      # Ensure the generated app/build.gradle still contains the BouncyCastle
-      # exclusion used to avoid duplicate-class failures between:
-      #   org.bouncycastle:bcprov-jdk15on and org.bouncycastle:bcprov-jdk15to18
-      # If missing, append a safeguard block and fail loudly if we still cannot
-      # verify it. The durable source of truth is the Expo config plugin.
       - name: Verify BouncyCastle exclusion in generated app/build.gradle
         run: |
           APP_GRADLE="apps/mobile/android/app/build.gradle"
@@ -356,21 +112,6 @@ jobs:
             exit 1
           fi
 
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 8 — RESTORE GRADLE WRAPPER DISTRIBUTION CACHE
-      # ─────────────────────────────────────────────────────────────────────
-      # The Gradle wrapper bootstraps the correct Gradle version by downloading
-      # a ~100 MB distribution ZIP from Gradle's CDN on first use. This step
-      # caches that downloaded distribution to avoid re-downloading it on
-      # every run.
-      #
-      # Cache key: hash of gradle-wrapper.properties which specifies the exact
-      # Gradle version URL. The cache is invalidated only when the project
-      # upgrades its Gradle version.
-      #
-      # PLACEMENT: This step MUST come after expo prebuild (step 7) because
-      # gradle-wrapper.properties is part of the generated android/ project.
-      # The file did not exist before step 7 ran.
       - name: Restore Gradle wrapper distribution cache
         uses: actions/cache@v4
         with:
@@ -378,32 +119,6 @@ jobs:
           key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('apps/mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-wrapper-
-
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 9 — RESTORE GRADLE DEPENDENCY CACHE
-      # ─────────────────────────────────────────────────────────────────────
-      # Gradle's local module cache stores compiled JARs, POMs, and metadata
-      # for every declared Maven/JCenter dependency. A cold run downloads
-      # 400–600 MB of artifacts; a warm cache run reuses them from disk.
-      #
-      # Cache paths:
-      #   ~/.gradle/caches            — global Gradle module/artifact cache
-      #                                 shared across all projects on the runner
-      #   apps/mobile/android/.gradle — per-project Gradle cache containing
-      #                                 configuration cache and build-cache
-      #                                 entries for this specific project
-      #
-      # Cache key: hash of all *.gradle* and *.gradle.kts files which declare
-      # dependencies, plugins, and build logic. The cache is invalidated when
-      # any dependency version changes.
-      #
-      # Restore keys provide a cascade fallback:
-      #   1. Exact OS + file hash match     → full cache hit (fastest)
-      #   2. OS prefix only                  → partial hit (some deps cached)
-      #   3. No match                        → cold run (all deps downloaded)
-      #
-      # PLACEMENT: Must come after expo prebuild (step 7) so that *.gradle*
-      # files exist when the cache key is computed.
       - name: Restore Gradle dependencies cache
         uses: actions/cache@v4
         with:
@@ -413,90 +128,12 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/**/*.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 10 — MAKE GRADLE WRAPPER EXECUTABLE
-      # ─────────────────────────────────────────────────────────────────────
-      # expo prebuild generates the gradlew shell script without the executable
-      # bit on Linux file systems. Without this chmod, the next step fails with:
-      #   "bash: ./gradlew: Permission denied"
-      #
-      # This is a Linux-specific requirement. The executable bit is preserved
-      # in git if the file were committed, but since android/ is generated
-      # fresh on every run, the bit must be set explicitly each time.
       - name: Make Gradle wrapper executable
         run: chmod +x apps/mobile/android/gradlew
-
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 11 — BUILD RELEASE APK
-      # ─────────────────────────────────────────────────────────────────────
-      # `assembleRelease` compiles all Java/Kotlin sources, processes resources,
-      # links native libraries, runs R8 code shrinking/optimisation, and
-      # packages everything into a release APK.
-      #
-      # Release vs debug:
-      #   • debuggable=false     — no USB debugging or logcat attachment
-      #   • R8/ProGuard enabled  — code shrinking, dead-code removal
-      #   • Obfuscation enabled  — shorter class/method names in stack traces
-      #   • Output               — app-release.apk with the current debug
-      #                            signing config in apps/mobile/android/app/build.gradle
-      #   • Installable via adb: `adb install app-release.apk`
-      #                          (requires --allow-test on some devices)
-      #
-      # Gradle flags:
-      #   --no-daemon    — explicitly disable the Gradle daemon. Already set
-      #                    via GRADLE_OPTS but repeated here for clarity. On
-      #                    ephemeral CI runners, the daemon provides zero
-      #                    benefit (there is no "next build" to warm up for)
-      #                    and wastes ~300 MB of heap.
-      #
-      #   --stacktrace   — print the full exception chain on failure. Without
-      #                    this, Gradle often prints only the high-level task
-      #                    name that failed without showing the underlying cause.
-      #                    The full stack trace is essential for diagnosing
-      #                    build failures in CI logs.
-      #
-      # GRADLE_OPTS (set in job env) additionally enables:
-      #   parallel=true, configureondemand=true, Xmx4g, MaxMetaspaceSize=512m
-      #
-      # APK output location (standard Android build convention):
-      #   app/build/outputs/apk/release/*.apk
-      #
-      # COMMON FAILURE SCENARIOS
-      # ─────────────────────────────────────────────────────────────────────
-      # 1. "Task :app:compileReleaseJavaWithJavac FAILED"
-      #    Cause: Java compilation error in generated or library code.
-      #    Fix:   Inspect the full build log. Often a misconfigured Expo plugin
-      #           or incompatible library version. Run `expo doctor` locally.
-      #
-      # 2. "CMakeLists.txt file not found"
-      #    Cause: A native C++ module (via React Native JSI/TurboModules) needs
-      #           the NDK and its CMakeLists.txt is not being resolved.
-      #    Fix:   Verify the NDK is installed (step 6 logs ndk/ directory).
-      #           Add the required ndk.dir to local.properties or set
-      #           ANDROID_NDK_HOME explicitly.
-      #
-      # 3. "Execution failed for task ':app:processReleaseManifest'"
-      #    Cause: AndroidManifest.xml merge conflict between the app and a
-      #           library (common with SSH/Bluetooth libraries).
-      #    Fix:   Add `tools:replace` attributes to the conflicting manifest
-      #           entries or configure the merge in app/src/main/AndroidManifest.xml.
-      #
-      # 4. "Could not find com.android.tools.build:gradle:X.X.X"
-      #    Cause: Maven Central or Google Maven outage; transient network error.
-      #    Fix:   Rerun the workflow. For persistent failures, pin the AGP
-      #           version to one already in the Gradle cache.
-      #
-      # 5. "OutOfMemoryError: Java heap space"
-      #    Cause: Build exceeds the JVM heap set in GRADLE_OPTS.
-      #    Fix:   Increase -Xmx above 4g (e.g., -Xmx6g) if the runner has
-      #           enough free memory. ubuntu-latest has 7 GB total RAM.
       - name: Build release APK
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      # On failures, print a focused dependency insight for BouncyCastle to make
-      # duplicate-class root causes obvious in CI logs.
       - name: Dependency insight for BouncyCastle on failure
         if: failure()
         working-directory: apps/mobile/android
@@ -505,31 +142,6 @@ jobs:
             --configuration releaseRuntimeClasspath \
             --dependency bcprov \
             --no-daemon || true
-
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 12 — UPLOAD RELEASE APK ARTIFACT
-      # ─────────────────────────────────────────────────────────────────────
-      # Stores the built APK as a GitHub Actions artifact. Team members and
-      # testers can download it directly from the workflow run summary page
-      # without needing local Android tooling or re-running the build.
-      #
-      # Installing the APK on a device:
-      #   1. Download the artifact ZIP from the run summary page.
-      #   2. Extract the release APK from the ZIP.
-      #   3. Option A: `adb install app-release.apk` (USB debugging)
-      #   4. Option B: Transfer to device and open with a file manager
-      #      (requires "Install unknown apps" enabled in Android settings)
-      #
-      # Naming convention: shelly-release-apk-<full-sha> makes it easy to
-      # correlate an artifact to its source commit in git history.
-      #
-      # retention-days: 30 — release APKs have a longer useful life than debug
-      # builds. 30 days covers the typical release validation and review cycle.
-      #
-      # if-no-files-found: error — fail the step if no release APK exists under
-      # the standard output directory even though Gradle reported success. This
-      # remains resilient if the exact filename changes while the directory
-      # structure stays the same.
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         if: success()
@@ -538,28 +150,7 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 30
           if-no-files-found: error
-
-      # ─────────────────────────────────────────────────────────────────────
-      # STEP 13 — UPLOAD GRADLE BUILD REPORTS ON FAILURE (DIAGNOSTIC)
-      # ─────────────────────────────────────────────────────────────────────
-      # When assembleRelease fails, Gradle writes detailed HTML reports to
-      # app/build/reports/. These reports include:
-      #   • Full task execution timeline
-      #   • Lint violations
-      #   • Test results (if tests ran before the failure)
-      #   • Dependency resolution details
-      #
-      # This step uploads those reports as a separate artifact so developers
-      # can inspect them without re-running a 30-minute build. The reports
-      # are also useful for identifying flaky failures in the build graph.
-      #
       # `if: failure()` — run ONLY when a previous step failed. On successful
-      # builds, no diagnostic artifact is uploaded, keeping the run summary
-      # clean and reducing unnecessary artifact storage usage.
-      #
-      # if-no-files-found: ignore — Gradle may not write reports if it failed
-      # very early (e.g., before the configuration phase completed). In that
-      # case, skip silently rather than masking the real failure with a second
       # error about missing report files.
       - name: Upload Gradle build reports on failure
         uses: actions/upload-artifact@v4
@@ -572,21 +163,6 @@ jobs:
           retention-days: 3
           if-no-files-found: ignore
 
-  # ---------------------------------------------------------------------------
-  # JOB: create-github-release
-  # ---------------------------------------------------------------------------
-  # Creates a GitHub Release with the release APK attached whenever the workflow
-  # is triggered by a version tag (vX.Y.Z). On branch pushes and PRs this job
-  # is skipped entirely (if: condition below).
-  #
-  # Flow:
-  #   1. Download the APK artifact uploaded by build-android-apk
-  #   2. Create (or update) a GitHub Release for the pushed tag, attaching the
-  #      APK and auto-generating release notes from merged PRs/commits.
-  #
-  # Permissions: The job-level `contents: write` grant overrides the top-level
-  # `contents: read` so the GITHUB_TOKEN can create releases and upload assets
-  # without broadening permissions for the entire workflow.
   create-github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -596,29 +172,11 @@ jobs:
       contents: write
 
     steps:
-      # ───────────────────────────────────────────────────────────────────────
-      # STEP 1 — DOWNLOAD APK ARTIFACT
-      # ───────────────────────────────────────────────────────────────────────
-      # The build job uploads the APK under the name `shelly-release-apk-<sha>`.
-      # We download it here so the release step can attach it as an asset.
       - name: Download release APK artifact
         uses: actions/download-artifact@v4
         with:
           name: shelly-release-apk-${{ github.sha }}
           path: ./release-artifacts
-
-      # ───────────────────────────────────────────────────────────────────────
-      # STEP 2 — CREATE GITHUB RELEASE
-      # ───────────────────────────────────────────────────────────────────────
-      # softprops/action-gh-release creates (or updates) a release for the
-      # current tag, attaches the APK, and auto-generates release notes from
-      # PRs and commits merged since the previous tag.
-      #
-      # generate_release_notes: true — GitHub computes a changelog from the
-      # PRs and commits since the last release tag automatically.
-      #
-      # draft: false / prerelease: false — publish immediately as a full
-      # release. Change `prerelease: true` for alpha/beta tags (e.g., v1.0.0-beta.1).
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -627,66 +185,3 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
-
-# =============================================================================
-# GRADLE PROPERTIES REFERENCE
-# =============================================================================
-#
-# expo prebuild auto-generates apps/mobile/android/gradle.properties with
-# sensible defaults. The GRADLE_OPTS environment variable in this workflow
-# overrides JVM heap settings without modifying any generated file. If you
-# need to persist custom Gradle properties in the generated project, add an
-# Expo config plugin that writes to gradle.properties during prebuild, or
-# include a postinstall script that appends to the generated file.
-#
-# Standard properties set by Expo 55 prebuild:
-#   android.useAndroidX=true
-#   android.enableJetifier=true
-#   newArchEnabled=true           (React Native New Architecture)
-#   hermesEnabled=true            (Hermes JS engine)
-#
-# Recommended additions for CI (handled via GRADLE_OPTS above, no file edit):
-#   org.gradle.daemon=false
-#   org.gradle.parallel=true
-#   org.gradle.configureondemand=true
-#   org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m
-#
-# =============================================================================
-# SECRETS REFERENCE
-# =============================================================================
-#
-# This workflow requires NO repository secrets. The generated release APK uses
-# the debug signing config currently defined in apps/mobile/android/app/build.gradle,
-# which is suitable for CI validation and tester installs but not for Play Store
-# distribution.
-#
-# To produce a SIGNED release APK for Play Store distribution, add a signing
-# step before assembleRelease using these secrets:
-#   secrets.ANDROID_KEYSTORE_BASE64   — base64-encoded .jks keystore file
-#   secrets.KEYSTORE_PASSWORD         — keystore password
-#   secrets.KEY_ALIAS                 — key alias within the keystore
-#   secrets.KEY_PASSWORD              — key password
-#
-# Configure these under:
-#   Repository → Settings → Secrets and variables → Actions → New repository secret
-#
-# =============================================================================
-# RETRY LOGIC REFERENCE
-# =============================================================================
-#
-# Transient failures (network blips during Gradle dependency downloads or
-# intermittent Maven Central outages) can cause the assembleRelease step to
-# fail. To add automatic retry logic, wrap the Gradle step with:
-#
-#   - name: Build release APK (with retry)
-#     uses: nick-invision/retry@v3
-#     with:
-#       timeout_minutes: 40
-#       max_attempts: 3
-#       retry_wait_seconds: 30
-#       command: cd apps/mobile/android && ./gradlew assembleRelease --no-daemon --stacktrace
-#
-# Install the action: it is a community action — pin to a full commit SHA for
-# supply-chain security if retries are critical to your workflow reliability.
-#
-# =============================================================================
