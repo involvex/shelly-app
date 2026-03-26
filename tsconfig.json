@@ -26,11 +26,10 @@
 		"noUnusedParameters": false,
 		"noPropertyAccessFromIndexSignature": false,
 		"types": ["node"],
-		"baseUrl": ".",
 		"paths": {
-			"@/*": ["apps/mobile/src/*"],
-			"@shelly/shared": ["packages/shared/src/index.ts"],
-			"@shelly/mobile/*": ["apps/mobile/src/*"]
+			"@/*": ["./apps/mobile/src/*"],
+			"@shelly/shared": ["./packages/shared/src/index.ts"],
+			"@shelly/mobile/*": ["./apps/mobile/src/*"]
 		}
 	}
 }

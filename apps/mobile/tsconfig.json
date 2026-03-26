@@ -1,6 +1,5 @@
 {
 	"compilerOptions": {
-		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"],
 			"@shelly/shared": ["../../packages/shared/src/index.ts"]

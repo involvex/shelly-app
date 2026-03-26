@@ -1,10 +1,9 @@
-name: Build Android Release APK
+name: Build Android Debug APK
 
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - '!*_dev'
+      - '*_dev'
 
   workflow_dispatch:
 
@@ -16,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  build-android-apk:
-    name: Build Android Release APK
+  build-android-debug-apk:
+    name: Build Android Debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -128,28 +127,26 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Make Gradle wrapper executable
         run: chmod +x apps/mobile/android/gradlew
-      - name: Build release APK
+      - name: Build debug APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Dependency insight for BouncyCastle on failure
         if: failure()
         working-directory: apps/mobile/android
         run: |
           ./gradlew :app:dependencyInsight \
-            --configuration releaseRuntimeClasspath \
+            --configuration debugRuntimeClasspath \
             --dependency bcprov \
             --no-daemon || true
-      - name: Upload release APK artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: shelly-release-apk-${{ github.sha }}
-          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
-          retention-days: 30
+          name: shelly-debug-apk-${{ github.sha }}
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
           if-no-files-found: error
-      # `if: failure()` — run ONLY when a previous step failed. On successful
-      # error about missing report files.
       - name: Upload Gradle build reports on failure
         uses: actions/upload-artifact@v4
         if: failure()
@@ -160,26 +157,3 @@ jobs:
             apps/mobile/android/build/reports/
           retention-days: 3
           if-no-files-found: ignore
-
-  create-github-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: build-android-apk
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download release APK artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: shelly-release-apk-${{ github.sha }}
-          path: ./release-artifacts
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: 'Shelly ${{ github.ref_name }}'
-          files: ./release-artifacts/*.apk
-          generate_release_notes: true
-          draft: false
-          prerelease: false
