@@ -21,6 +21,7 @@
 		"build:shared": "bun run -F @shelly/shared build",
 		"check:app": "bun run prebuild && bun run -F @shelly/mobile check",
 		"format": "prettier . --write",
+		"postinstall": "bun run -F @shelly/mobile patch:ssh-sftp-gradle",
 		"lint": "eslint .",
 		"lint:fix": "eslint --fix .",
 		"start:app": "bun run -F @shelly/mobile start",

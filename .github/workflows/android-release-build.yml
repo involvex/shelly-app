@@ -4,9 +4,10 @@
 #
 # PURPOSE
 # -------
-# Builds an unsigned release APK for the Expo React Native app at apps/mobile
-# and stores it as a downloadable workflow artifact. Release variant enables
-# R8 code shrinking and optimisations without requiring a signing keystore.
+# Builds a release APK for the Expo React Native app at apps/mobile and stores
+# it as a downloadable workflow artifact. The current Android config signs the
+# release build with the debug keystore, which is suitable for CI validation
+# and device testing but not for Play Store distribution.
 #
 # MONOREPO CONTEXT
 # ----------------
@@ -25,7 +26,7 @@
 #
 # APK OUTPUT
 # ----------
-# apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+# apps/mobile/android/app/build/outputs/apk/release/*.apk
 #
 # =============================================================================
 
@@ -227,22 +228,19 @@ jobs:
         run: bun install --frozen-lockfile
 
       # ─────────────────────────────────────────────────────────────────────
-      # STEP 5b — APPLY NODE_MODULES PATCHES
+      # STEP 5b — NORMALIZE SSH/SFTP GRADLE REPOSITORIES
       # ─────────────────────────────────────────────────────────────────────
-      # patch-package applies unified diffs from apps/mobile/patches/ to the
-      # installed node_modules. The critical patch here replaces the deprecated
-      # jcenter() repository with mavenCentral() in the
-      # @dylankenneally/react-native-ssh-sftp android/build.gradle file.
-      # jcenter() was shut down and removed from Gradle 9, causing the build
-      # to fail with "Could not find method jcenter()".
+      # The upstream @dylankenneally/react-native-ssh-sftp package still ships
+      # a Gradle file that references jcenter(), which Gradle 9 removed.
+      # A repo-owned Bun script rewrites that dependency's installed
+      # android/build.gradle file so both GitHub Actions and EAS builds use
+      # mavenCentral() consistently.
       #
-      # NOTE: Bun does not execute workspace-package lifecycle scripts when
-      # `bun install` runs at the monorepo root, so the postinstall hook in
-      # apps/mobile/package.json does not fire in CI. This explicit step
-      # guarantees the patch is applied before Gradle processes any build files.
-      - name: Apply node_modules patches
-        working-directory: apps/mobile
-        run: bunx patch-package
+      # The same script also runs from postinstall for root and workspace
+      # installs, but we re-run it explicitly here as a CI guard so failures
+      # surface before Expo prebuild and Gradle evaluation begin.
+      - name: Normalize SSH/SFTP Gradle repositories
+        run: bun run -F @shelly/mobile patch:ssh-sftp-gradle
 
       # ─────────────────────────────────────────────────────────────────────
       # STEP 6 — VALIDATE ANDROID SDK ENVIRONMENT
@@ -434,15 +432,15 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       # `assembleRelease` compiles all Java/Kotlin sources, processes resources,
       # links native libraries, runs R8 code shrinking/optimisation, and
-      # packages everything into an unsigned release APK.
+      # packages everything into a release APK.
       #
       # Release vs debug:
       #   • debuggable=false     — no USB debugging or logcat attachment
       #   • R8/ProGuard enabled  — code shrinking, dead-code removal
       #   • Obfuscation enabled  — shorter class/method names in stack traces
-      #   • Unsigned output      — app-release-unsigned.apk; must be signed
-      #                            before uploading to the Play Store
-      #   • Installable via adb: `adb install app-release-unsigned.apk`
+      #   • Output               — app-release.apk with the current debug
+      #                            signing config in apps/mobile/android/app/build.gradle
+      #   • Installable via adb: `adb install app-release.apk`
       #                          (requires --allow-test on some devices)
       #
       # Gradle flags:
@@ -462,7 +460,7 @@ jobs:
       #   parallel=true, configureondemand=true, Xmx4g, MaxMetaspaceSize=512m
       #
       # APK output location (standard Android build convention):
-      #   app/build/outputs/apk/release/app-release-unsigned.apk
+      #   app/build/outputs/apk/release/*.apk
       #
       # COMMON FAILURE SCENARIOS
       # ─────────────────────────────────────────────────────────────────────
@@ -517,8 +515,8 @@ jobs:
       #
       # Installing the APK on a device:
       #   1. Download the artifact ZIP from the run summary page.
-      #   2. Extract app-release-unsigned.apk from the ZIP.
-      #   3. Option A: `adb install app-release-unsigned.apk` (USB debugging)
+      #   2. Extract the release APK from the ZIP.
+      #   3. Option A: `adb install app-release.apk` (USB debugging)
       #   4. Option B: Transfer to device and open with a file manager
       #      (requires "Install unknown apps" enabled in Android settings)
       #
@@ -528,16 +526,16 @@ jobs:
       # retention-days: 30 — release APKs have a longer useful life than debug
       # builds. 30 days covers the typical release validation and review cycle.
       #
-      # if-no-files-found: error — fail the step if the expected APK path is
-      # missing even though Gradle reported success. This catches edge cases
-      # where the output directory structure changed (e.g., a new Gradle plugin
-      # that renames the output) rather than silently uploading an empty artifact.
+      # if-no-files-found: error — fail the step if no release APK exists under
+      # the standard output directory even though Gradle reported success. This
+      # remains resilient if the exact filename changes while the directory
+      # structure stays the same.
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: shelly-release-apk-${{ github.sha }}
-          path: apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 30
           if-no-files-found: error
 
@@ -577,7 +575,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # JOB: create-github-release
   # ---------------------------------------------------------------------------
-  # Creates a GitHub Release with the signed APK attached whenever the workflow
+  # Creates a GitHub Release with the release APK attached whenever the workflow
   # is triggered by a version tag (vX.Y.Z). On branch pushes and PRs this job
   # is skipped entirely (if: condition below).
   #
@@ -625,7 +623,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: 'Shelly ${{ github.ref_name }}'
-          files: ./release-artifacts/app-release-unsigned.apk
+          files: ./release-artifacts/*.apk
           generate_release_notes: true
           draft: false
           prerelease: false
@@ -657,9 +655,10 @@ jobs:
 # SECRETS REFERENCE
 # =============================================================================
 #
-# This unsigned-release workflow requires NO repository secrets. The unsigned
-# APK is built without a signing keystore — suitable for testing release-mode
-# optimisations (R8, ProGuard) without Play Store distribution.
+# This workflow requires NO repository secrets. The generated release APK uses
+# the debug signing config currently defined in apps/mobile/android/app/build.gradle,
+# which is suitable for CI validation and tester installs but not for Play Store
+# distribution.
 #
 # To produce a SIGNED release APK for Play Store distribution, add a signing
 # step before assembleRelease using these secrets:
