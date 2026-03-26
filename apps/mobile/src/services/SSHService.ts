@@ -72,7 +72,7 @@ export class SSHService implements ISSHService {
 			setTimeout(() => {
 				if (this.client && this._isConnected) {
 					void this.client.writeToShell(
-						`stty cols ${cols} rows ${rows}; export TERM=xterm-256color; export GIT_TERMINAL_PROMPT=0\r`,
+						`stty cols ${cols} rows ${rows} 2>/dev/null; export TERM=xterm-256color; export GIT_TERMINAL_PROMPT=0\r`,
 					)
 				}
 			}, 300)

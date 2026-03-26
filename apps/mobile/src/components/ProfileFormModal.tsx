@@ -160,7 +160,7 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 			<View style={styles.backdrop}>
 				<KeyboardAvoidingView
 					style={styles.kavWrapper}
-					behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+					behavior={Platform.OS === 'ios' ? 'padding' : undefined}
 				>
 					<SafeAreaView style={styles.sheet} edges={['bottom']}>
 						{/* ── Header ── */}

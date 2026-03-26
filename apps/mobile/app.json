@@ -26,7 +26,13 @@
 		"package": "com.involvex.shelly",
 		"icon": "assets/icon512x512.png",
 		"userInterfaceStyle": "automatic",
-		"versionCode": 3
+		"versionCode": 3,
+		"permissions": [
+			"INTERNET",
+			"ACCESS_NETWORK_STATE",
+			"READ_EXTERNAL_STORAGE",
+			"WRITE_EXTERNAL_STORAGE"
+		]
 	},
 	"ios": {
 		"icon": "assets/icon512x512.png"

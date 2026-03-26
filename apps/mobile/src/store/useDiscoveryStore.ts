@@ -59,7 +59,7 @@ interface DiscoveryState {
 }
 
 const BATCH_SIZE = 30
-const PROBE_TIMEOUT = 800
+const PROBE_TIMEOUT = 1200
 const SSH_PORT = 22
 
 function unavailableRuntimeMessage(params: {
@@ -129,9 +129,12 @@ function probePort(
 
 		try {
 			socket = tcpSocket.createConnection({host, port}, () => settle(true))
+			// 'data' fires when the SSH banner arrives — useful if 'connect' fires late
+			socket.on('data', () => settle(true))
 			socket.on('error', () => settle(false))
-			socket.on('timeout', () => settle(false))
-			socket.setTimeout(timeoutMs)
+			// Do NOT use socket.setTimeout here: it races with the outer timer and
+			// can fire just before the 'connect' event on slow paths, causing the
+			// open port to be falsely reported as closed.
 		} catch {
 			settle(false)
 		}
@@ -141,7 +144,7 @@ function probePort(
 export const useDiscoveryStore = create<DiscoveryState>(set => {
 	// TS 5.4+ can preserve literal narrowing from last assignment.
 	// Wrap reads in Boolean(...) so checks stay typed as plain boolean.
-	const ctrl = {aborted: false}
+	let ctrl = {aborted: false}
 	const runtime = Constants.executionEnvironment
 	const isExpoGoRuntime = runtime === 'storeClient'
 	const hasNetwork = Boolean(Network)
@@ -162,7 +165,10 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 		scanError: unavailableMessage,
 
 		startScan: async () => {
-			ctrl.aborted = false
+			// Abort any ongoing scan, then create a fresh controller for this run.
+			ctrl.aborted = true
+			const localCtrl = {aborted: false}
+			ctrl = localCtrl
 			set({
 				isScanning: true,
 				hosts: [],
@@ -228,6 +234,10 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 				return
 			}
 
+			console.log(
+				`[Discovery] Device IP: ${deviceIp} — scanning ${base}.1–254 on port ${SSH_PORT}`,
+			)
+
 			const candidates: string[] = []
 			for (let i = 1; i <= 254; i++) {
 				const ip = `${base}.${i}`
@@ -236,8 +246,9 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 			set({scanTotal: candidates.length})
 
 			let scanned = 0
+			let totalFound = 0
 			for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-				if (ctrl.aborted) break
+				if (localCtrl.aborted) break
 				const batch = candidates.slice(i, i + BATCH_SIZE)
 				const results = await Promise.all(
 					batch.map(async host => ({
@@ -250,14 +261,33 @@ export const useDiscoveryStore = create<DiscoveryState>(set => {
 					.filter(r => r.open)
 					.map(r => ({name: r.host, host: r.host, port: SSH_PORT}))
 
+				if (found.length > 0) {
+					totalFound += found.length
+					console.log(
+						`[Discovery] Found open port 22 on: ${found.map(h => h.host).join(', ')}`,
+					)
+				}
+
 				set(state => ({
 					scanProgress: scanned,
 					hosts: found.length > 0 ? [...state.hosts, ...found] : state.hosts,
 				}))
 			}
 
-			if (!ctrl.aborted) {
-				set({isScanning: false})
+			if (!localCtrl.aborted) {
+				console.log(
+					`[Discovery] Scan complete — subnet ${base}.x, found: ${totalFound} host(s)`,
+				)
+				set(state => ({
+					isScanning: false,
+					scanError:
+						state.hosts.length === 0
+							? `Scanned ${base}.1–254, no SSH devices found.\n` +
+								`• Check Windows Firewall allows port 22 inbound\n` +
+								`• Ensure router AP isolation is off\n` +
+								`• Confirm phone & PC are on the same subnet (${base}.x)`
+							: null,
+				}))
 			}
 		},
 
