@@ -14,13 +14,25 @@ if (Platform.OS !== 'web') {
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		Network = require('expo-network')
-	} catch {
+	} catch (err: unknown) {
+		console.warn('[Discovery] expo-network unavailable:', err)
 		// Native module unavailable — startScan will surface a user-facing error.
 	}
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		TcpSocket = require('react-native-tcp-socket').default
-	} catch {
+		const mod = require('react-native-tcp-socket')
+		// react-native-tcp-socket may export via ESM interop (.default) or CJS
+		// (module.exports = TcpSocket). Handle both to avoid a silent undefined.
+		const candidate = mod?.default ?? mod
+		if (typeof candidate?.createConnection === 'function') {
+			TcpSocket = candidate
+		} else {
+			console.warn(
+				'[Discovery] react-native-tcp-socket loaded but createConnection API is missing — native module may not be linked',
+			)
+		}
+	} catch (err: unknown) {
+		console.warn('[Discovery] react-native-tcp-socket unavailable:', err)
 		// Native module unavailable — probePort will resolve false for every host.
 	}
 }

@@ -451,9 +451,11 @@ const styles = StyleSheet.create({
 		justifyContent: 'flex-end',
 	},
 	kavWrapper: {
+		flex: 1,
 		maxHeight: '92%',
 	},
 	sheet: {
+		flex: 1,
 		backgroundColor: '#18181b',
 		borderTopLeftRadius: 22,
 		borderTopRightRadius: 22,

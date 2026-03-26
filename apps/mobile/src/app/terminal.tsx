@@ -440,11 +440,6 @@ export default function TerminalScreen() {
 								</TouchableOpacity>
 							)}
 						</View>
-						{!isDiscoveryAvailable && (
-							<Text style={[ts, styles.discoveryDisabledText]}>
-								Local discovery is disabled in this runtime.
-							</Text>
-						)}
 						{hosts.map(d => (
 							<TouchableOpacity
 								key={d.host}
