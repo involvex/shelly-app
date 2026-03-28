@@ -17,6 +17,7 @@ import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {ProfileFormModal} from '../components/ProfileFormModal'
 import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
+import type {IProgressState} from '@xterm/addon-progress'
 import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
 import {useSSHProfiles} from '../store/useSSHProfiles'
@@ -25,11 +26,14 @@ import {useSSHSettings} from '../hooks/useSSHSettings'
 import {useColorScheme} from '../lib/useColorScheme'
 import {useEffect, useRef, useState} from 'react'
 import {useSSHStore} from '../store/useSSHStore'
+import type {SSHConfig} from '@shelly/shared'
 import {scaleText} from 'react-native-text'
 import {StatusBar} from 'expo-status-bar'
 import {router} from 'expo-router'
 
 const ts = scaleText({fontSize: 14})
+
+type ConnectionMode = 'ssh' | 'websocket'
 
 export default function TerminalScreen() {
 	const {
@@ -77,6 +81,11 @@ export default function TerminalScreen() {
 		privateKey: '',
 		keyPassphrase: '',
 	})
+	const [connectionMode, setConnectionMode] = useState<ConnectionMode>('ssh')
+	const [progressState, setProgressState] = useState<IProgressState | null>(
+		null,
+	)
+	const [wsUrl, setWsUrl] = useState('wss://localhost:8022/shell')
 
 	/**
 	 * After connecting, we send this startup command (if any) once with a short
@@ -138,19 +147,23 @@ export default function TerminalScreen() {
 	const handleConnect = async () => {
 		const port = parseInt(settings.port, 10) || 22
 		await save(settings)
-		connect({
-			host: settings.host,
-			port,
-			user: settings.user,
-			auth:
-				settings.authMode === 'key'
-					? {
-							type: 'key',
-							value: settings.privateKey,
-							keyPassphrase: settings.keyPassphrase || undefined,
-						}
-					: {type: 'password', value: settings.password},
-		})
+		connect(
+			{
+				host: settings.host,
+				port,
+				user: settings.user,
+				auth:
+					settings.authMode === 'key'
+						? {
+								type: 'key',
+								value: settings.privateKey,
+								keyPassphrase: settings.keyPassphrase || undefined,
+							}
+						: {type: 'password', value: settings.password},
+				...(connectionMode === 'websocket' ? {url: wsUrl} : {}),
+			} as SSHConfig & {url?: string},
+			connectionMode,
+		)
 	}
 
 	const handleSelectProfile = async (id: string) => {
@@ -385,6 +398,48 @@ export default function TerminalScreen() {
 							accessibilityLabel="SSH username"
 						/>
 
+						<Text style={[ts, styles.fieldLabel]}>Connection</Text>
+						<View style={styles.authModeRow}>
+							{(['ssh', 'websocket'] as const).map(mode => (
+								<TouchableOpacity
+									key={mode}
+									onPress={() => setConnectionMode(mode)}
+									style={[
+										styles.authModeChip,
+										connectionMode === mode && styles.authModeChipActive,
+									]}
+									accessibilityRole="button"
+									accessibilityLabel={`Use ${mode === 'ssh' ? 'SSH' : 'WebSocket'} connection`}
+								>
+									<Text
+										style={[
+											ts,
+											styles.authModeChipLabel,
+											connectionMode === mode && styles.authModeChipLabelActive,
+										]}
+									>
+										{mode === 'ssh' ? 'SSH' : 'WebSocket'}
+									</Text>
+								</TouchableOpacity>
+							))}
+						</View>
+
+						{connectionMode === 'websocket' && (
+							<>
+								<Text style={[ts, styles.fieldLabel]}>WebSocket URL</Text>
+								<TextInput
+									value={wsUrl}
+									onChangeText={setWsUrl}
+									placeholder="wss://host:port/shell"
+									placeholderTextColor="#555"
+									autoCapitalize="none"
+									autoCorrect={false}
+									style={[ts, styles.input]}
+									accessibilityLabel="WebSocket URL"
+								/>
+							</>
+						)}
+
 						<Text style={[ts, styles.fieldLabel]}>Authentication</Text>
 						<View style={styles.authModeRow}>
 							{(['password', 'key'] as const).map(mode => (
@@ -578,9 +633,32 @@ export default function TerminalScreen() {
 			<View style={[styles.kavFlex, {paddingBottom: bottomPadding}]}>
 				{/* Status bar */}
 				<View style={styles.terminalHeader}>
-					<Text style={[ts, styles.terminalSessionLabel]}>
-						{settings.user}@{settings.host}
-					</Text>
+					<View style={styles.terminalHeaderLeft}>
+						<Text style={[ts, styles.terminalSessionLabel]}>
+							{settings.user}@{settings.host}
+						</Text>
+						{progressState != null && progressState.state !== 0 && (
+							<View style={styles.progressContainer}>
+								<View
+									style={[
+										styles.progressBar,
+										{
+											width:
+												progressState.state === 3
+													? '100%'
+													: `${Math.max(0, Math.min(100, progressState.value))}%`,
+											backgroundColor:
+												progressState.state === 2
+													? '#f87171'
+													: progressState.state === 4
+														? '#fbbf24'
+														: '#6366f1',
+										},
+									]}
+								/>
+							</View>
+						)}
+					</View>
 					<View style={styles.terminalHeaderActions}>
 						<TouchableOpacity
 							onPress={() => setSnippetsVisible(true)}
@@ -620,7 +698,18 @@ export default function TerminalScreen() {
 				</View>
 
 				<View style={styles.terminalBody}>
-					<TerminalView output={output} onData={sendData} />
+					<TerminalView
+						output={output}
+						onData={sendData}
+						fontSize={
+							appSettings.fontSize === 'small'
+								? 11
+								: appSettings.fontSize === 'large'
+									? 15
+									: 13
+						}
+						onProgress={setProgressState}
+					/>
 				</View>
 
 				{/* Toolbar sits just above the keyboard thanks to paddingBottom */}
@@ -815,10 +904,27 @@ const styles = StyleSheet.create({
 		borderBottomColor: '#27272a',
 		backgroundColor: '#18181b',
 	},
+	terminalHeaderLeft: {
+		flex: 1,
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 8,
+	},
 	terminalSessionLabel: {
 		color: '#71717a',
 		fontSize: 12,
 		fontFamily: 'monospace',
+	},
+	progressContainer: {
+		flex: 1,
+		height: 3,
+		backgroundColor: '#27272a',
+		borderRadius: 2,
+		overflow: 'hidden',
+	},
+	progressBar: {
+		height: '100%',
+		borderRadius: 2,
 	},
 	terminalHeaderActions: {flexDirection: 'row', gap: 8},
 	terminalHeaderBtn: {

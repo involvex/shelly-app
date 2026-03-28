@@ -22,6 +22,10 @@ function processOutput(raw: string): string {
 interface TerminalViewProps {
 	onData: (data: string) => void
 	output: string
+	fontSize?: number
+	onProgress?: (state: {state: 0 | 1 | 2 | 3 | 4; value: number} | null) => void
+	onSerialize?: (state: string) => void
+	savedState?: string | null
 }
 
 /**

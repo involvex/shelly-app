@@ -1,78 +1,260 @@
-import React, {useEffect, useRef} from 'react'
-import {scaleText} from 'react-native-text'
+import React, {
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useRef,
+	useState,
+} from 'react'
+import {ProgressAddon, type IProgressState} from '@xterm/addon-progress'
+import {expoClipboardProvider} from '@/lib/xterm-clipboard-provider'
+import {createLinkHandler} from '@/lib/xterm-link-handler'
+import {Unicode11Addon} from '@xterm/addon-unicode11'
+import {SerializeAddon} from '@xterm/addon-serialize'
+import {ClipboardAddon} from '@xterm/addon-clipboard'
+import {WebLinksAddon} from '@xterm/addon-web-links'
+import type {TerminalColors} from '@/theme/terminal'
+import {Terminal, type ITheme} from '@xterm/xterm'
+import {SearchAddon} from '@xterm/addon-search'
+import {SearchBar} from './terminal/SearchBar'
 import {FitAddon} from '@xterm/addon-fit'
-import {Terminal} from '@xterm/xterm'
 import {View} from 'react-native'
-
-// const { fontSize, lineHeight } = useScaleText({ fontSize: 18 });
-const textScaleStyle = scaleText({fontSize: 20})
 
 interface TerminalViewProps {
 	onData: (data: string) => void
 	output: string
+	colors?: TerminalColors
+	fontSize?: number
+	onProgress?: (state: IProgressState | null) => void
+	onSerialize?: (state: string) => void
+	savedState?: string | null
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({onData, output}) => {
+export interface TerminalViewHandle {
+	serialize: () => string
+	deserialize: (state: string) => void
+	focus: () => void
+}
+
+function toXtermTheme(colors?: TerminalColors): ITheme | undefined {
+	if (!colors) return undefined
+	return {
+		background: colors.background,
+		foreground: colors.outputText,
+		cursor: colors.accent,
+		cursorAccent: colors.background,
+		selectionBackground: colors.accentMuted + '40',
+		selectionForeground: colors.outputText,
+		black: '#000000',
+		red: colors.errorText,
+		green: colors.successText,
+		yellow: colors.warningText,
+		blue: colors.accent,
+		magenta: colors.accentMuted,
+		cyan: colors.accentLight,
+		white: colors.outputText,
+		brightBlack: colors.mutedText,
+		brightRed: colors.errorText,
+		brightGreen: colors.successText,
+		brightYellow: colors.warningText,
+		brightBlue: colors.accentLight,
+		brightMagenta: colors.accentMuted,
+		brightCyan: colors.accentLight,
+		brightWhite: colors.commandText,
+	}
+}
+
+export const TerminalView = React.forwardRef<
+	TerminalViewHandle,
+	TerminalViewProps
+>(function TerminalView(
+	{onData, output, colors, fontSize = 13, onProgress, onSerialize, savedState},
+	ref,
+) {
 	const terminalRef = useRef<HTMLDivElement>(null)
 	const term = useRef<Terminal | null>(null)
 	const fitAddon = useRef<FitAddon | null>(null)
+	const searchAddon = useRef<SearchAddon | null>(null)
+	const serializeAddon = useRef<SerializeAddon | null>(null)
+	const [searchOpen, setSearchOpen] = useState(false)
 
+	useImperativeHandle(
+		ref,
+		() => ({
+			serialize: () => serializeAddon.current?.serialize() ?? '',
+			deserialize: (state: string) => {
+				term.current?.clear()
+				term.current?.write(state)
+			},
+			focus: () => term.current?.focus(),
+		}),
+		[],
+	)
+
+	// Initialize terminal and all addons
 	useEffect(() => {
 		if (!terminalRef.current) return
 
-		// Load xterm CSS dynamically
-		if (!document.getElementById('xterm-style')) {
-			const link = document.createElement('link')
-			link.id = 'xterm-style'
-			link.rel = 'stylesheet'
-			link.href = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css'
-			document.head.appendChild(link)
-		}
+		const xtermTheme = toXtermTheme(colors)
 
-		term.current = new Terminal({
+		const terminal = new Terminal({
 			cursorBlink: true,
-			theme: {background: '#000'},
-			fontFamily: 'monospace',
-			fontSize: textScaleStyle.fontSize,
+			cursorStyle: 'block',
+			fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
+			fontSize,
+			lineHeight: 1.2,
+			theme: xtermTheme ?? {background: '#0d0d0d'},
+			allowProposedApi: true,
+			scrollback: 5000,
+			minimumContrastRatio: 4.5,
 		})
 
-		fitAddon.current = new FitAddon()
-		term.current.loadAddon(fitAddon.current)
-		term.current.open(terminalRef.current)
+		// Load addons in order
+		const fit = new FitAddon()
+		terminal.loadAddon(fit)
+		fitAddon.current = fit
 
-		// Small delay to ensure container is ready
-		setTimeout(() => {
-			fitAddon.current?.fit()
-		}, 100)
+		const unicode11 = new Unicode11Addon()
+		terminal.loadAddon(unicode11)
 
-		const disposable = term.current.onData(data => {
+		const webLinks = new WebLinksAddon(createLinkHandler())
+		terminal.loadAddon(webLinks)
+
+		const search = new SearchAddon()
+		terminal.loadAddon(search)
+		searchAddon.current = search
+
+		const clipboard = new ClipboardAddon(undefined, expoClipboardProvider)
+		terminal.loadAddon(clipboard)
+
+		const progress = new ProgressAddon()
+		terminal.loadAddon(progress)
+		if (onProgress) {
+			progress.onChange(state => onProgress(state))
+		}
+
+		const serializer = new SerializeAddon()
+		terminal.loadAddon(serializer)
+		serializeAddon.current = serializer
+
+		terminal.open(terminalRef.current)
+
+		// Restore saved state or write initial output
+		if (savedState) {
+			terminal.write(savedState)
+		} else if (output) {
+			terminal.write(output)
+		}
+
+		// Fit after opening with a short delay for DOM readiness
+		requestAnimationFrame(() => {
+			fit.fit()
+		})
+
+		// Data callback
+		const dataDisposable = terminal.onData(data => {
 			onData(data)
 		})
 
-		const resizeHandler = () => {
-			fitAddon.current?.fit()
+		// Keyboard shortcut for search
+		const keyDisposable = terminal.onKey(({domEvent}) => {
+			if ((domEvent.ctrlKey || domEvent.metaKey) && domEvent.key === 'f') {
+				domEvent.preventDefault()
+				setSearchOpen(prev => !prev)
+			}
+		})
+
+		// Resize observer
+		const resizeObserver = new ResizeObserver(() => {
+			fit.fit()
+		})
+		if (terminalRef.current) {
+			resizeObserver.observe(terminalRef.current)
 		}
-		window.addEventListener('resize', resizeHandler)
+
+		term.current = terminal
 
 		return () => {
-			disposable.dispose()
-			term.current?.dispose()
-			window.removeEventListener('resize', resizeHandler)
+			dataDisposable.dispose()
+			keyDisposable.dispose()
+			resizeObserver.disconnect()
+			terminal.dispose()
+			term.current = null
+			fitAddon.current = null
+			searchAddon.current = null
+			serializeAddon.current = null
 		}
 	}, [])
 
+	// React to output changes (append new data)
+	const prevOutputRef = useRef<string>(output ?? '')
 	useEffect(() => {
-		if (term.current && output) {
+		if (!term.current) return
+		const prev = prevOutputRef.current
+		if (output && output.length > prev.length && output.startsWith(prev)) {
+			term.current.write(output.slice(prev.length))
+		} else if (output && output !== prev) {
 			term.current.write(output)
 		}
+		prevOutputRef.current = output
 	}, [output])
 
+	// React to theme changes
+	useEffect(() => {
+		if (!term.current) return
+		const xtermTheme = toXtermTheme(colors)
+		if (xtermTheme) {
+			term.current.options.theme = xtermTheme
+		}
+	}, [colors])
+
+	// React to font size changes
+	useEffect(() => {
+		if (!term.current) return
+		term.current.options.fontSize = fontSize
+		requestAnimationFrame(() => {
+			fitAddon.current?.fit()
+		})
+	}, [fontSize])
+
+	// Persist terminal state on disconnect
+	useEffect(() => {
+		return () => {
+			if (onSerialize && serializeAddon.current) {
+				try {
+					const state = serializeAddon.current.serialize()
+					onSerialize(state)
+				} catch {
+					// Serialization may fail if terminal is already disposed
+				}
+			}
+		}
+	}, [onSerialize])
+
+	const handleSearchClose = useCallback(() => {
+		setSearchOpen(false)
+		searchAddon.current?.clearDecorations()
+		term.current?.focus()
+	}, [])
+
 	return (
-		<View style={{flex: 1, backgroundColor: '#000'}}>
+		<View style={{flex: 1, backgroundColor: colors?.background ?? '#0d0d0d'}}>
 			<div
 				ref={terminalRef}
-				style={{width: '100%', height: '100%', backgroundColor: '#000'}}
-			/>
+				style={{
+					width: '100%',
+					height: '100%',
+					backgroundColor: colors?.background ?? '#0d0d0d',
+					position: 'relative',
+				}}
+			>
+				{searchOpen && (
+					<SearchBar
+						searchAddon={searchAddon.current}
+						onClose={handleSearchClose}
+						accentColor={colors?.accent}
+					/>
+				)}
+			</div>
 		</View>
 	)
-}
+})
