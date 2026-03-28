@@ -17,7 +17,6 @@ import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {ProfileFormModal} from '../components/ProfileFormModal'
 import {TerminalToolbar} from '../components/TerminalToolbar'
 import {useDiscoveryStore} from '../store/useDiscoveryStore'
-import type {IProgressState} from '@xterm/addon-progress'
 import {useSnippetStore} from '../store/useSnippetStore'
 import {TerminalView} from '../components/TerminalView'
 import {useSSHProfiles} from '../store/useSSHProfiles'
@@ -32,6 +31,11 @@ import {StatusBar} from 'expo-status-bar'
 import {router} from 'expo-router'
 
 const ts = scaleText({fontSize: 14})
+
+interface IProgressState {
+	state: 0 | 1 | 2 | 3 | 4
+	value: number
+}
 
 type ConnectionMode = 'ssh' | 'websocket'
 

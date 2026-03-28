@@ -126,14 +126,37 @@ function probePort(
 		let settled = false
 		let socket: ReturnType<typeof tcpSocket.createConnection> | null = null
 
+		const cleanup = () => {
+			if (!socket) return
+			// Remove all listeners first to prevent callbacks firing on a
+			// half-closed socket.  Then defer destroy via setImmediate so
+			// any pending native thread-pool operations on this socket ID
+			// can finish before the native module removes it from its map.
+			// This prevents "No socket with id X" crashes in TcpSocketModule.
+			const s = socket
+			socket = null
+			s.removeAllListeners()
+			setImmediate(() => {
+				try {
+					s.end()
+				} catch {
+					// already closed
+				}
+				// Force-destroy after a short delay if end() didn't close it
+				setTimeout(() => {
+					try {
+						s.destroy()
+					} catch {
+						// already destroyed
+					}
+				}, 100)
+			})
+		}
+
 		const timer = setTimeout(() => {
 			if (!settled) {
 				settled = true
-				try {
-					socket?.destroy()
-				} catch {
-					// already destroyed
-				}
+				cleanup()
 				resolve(false)
 			}
 		}, timeoutMs)
@@ -142,11 +165,7 @@ function probePort(
 			if (settled) return
 			settled = true
 			clearTimeout(timer)
-			try {
-				socket?.destroy()
-			} catch {
-				// already destroyed
-			}
+			cleanup()
 			resolve(open)
 		}
 

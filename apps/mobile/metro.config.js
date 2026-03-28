@@ -4,6 +4,22 @@ const {withNativeWind} = require('nativewind/metro')
 const config = getDefaultConfig(__dirname)
 const previousEnhanceMiddleware = config.server?.enhanceMiddleware
 
+// Block @xterm/* packages on non-web platforms — they reference browser globals
+// (self, document, window) that don't exist in React Native's JS runtime.
+const originalResolveRequest = config.resolver?.resolveRequest
+config.resolver = {
+	...config.resolver,
+	resolveRequest: (context, moduleName, platform) => {
+		if (platform !== 'web' && moduleName.startsWith('@xterm/')) {
+			return {type: 'empty'}
+		}
+		if (typeof originalResolveRequest === 'function') {
+			return originalResolveRequest(context, moduleName, platform)
+		}
+		return context.resolveRequest(context, moduleName, platform)
+	},
+}
+
 config.server = {
 	...config.server,
 	enhanceMiddleware: middleware => {
