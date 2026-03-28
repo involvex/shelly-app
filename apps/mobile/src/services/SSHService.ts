@@ -51,11 +51,16 @@ export class SSHService implements ISSHService {
 				)
 			}
 
-			// Register shell output listener before starting the shell
+			// Register shell output listener before starting the shell.
+			// Track when the first data arrives (shell is ready) to time the
+			// stty/export commands correctly — Windows PowerShell can take 1-3s
+			// to initialise its profile, modules, and PSReadLine.
+			let shellReady = false
 			this.client.on('Shell', (event: {value: string} | string) => {
 				const data =
 					typeof event === 'string' ? event : (event as {value: string})?.value
 				if (data != null && data !== '') {
+					shellReady = true
 					this.emitData(data)
 				}
 			})
@@ -66,16 +71,28 @@ export class SSHService implements ISSHService {
 			// vim, and less work correctly. The SSH library starts a 0×0 PTY; without
 			// explicit stty the kernel reports a device error when git tries to open
 			// /dev/tty (the "could not read Username / No such device" error).
+			//
+			// Wait for the shell to produce its first output (indicating it's alive
+			// and accepting input) before sending setup commands.  Falls back to
+			// forcing the commands after ~5s if the shell never produces output.
 			const {width, height} = Dimensions.get('window')
 			const cols = Math.max(40, Math.floor(width / 8))
 			const rows = Math.max(20, Math.floor(height / 18))
-			setTimeout(() => {
-				if (this.client && this._isConnected) {
-					void this.client.writeToShell(
-						`stty cols ${cols} rows ${rows} 2>/dev/null; export TERM=xterm-256color; export GIT_TERMINAL_PROMPT=0\r`,
-					)
-				}
-			}, 300)
+			const setupCmd = `stty cols ${cols} rows ${rows} 2>/dev/null; export TERM=xterm-256color; export GIT_TERMINAL_PROMPT=0\r`
+
+			const attemptSetup = (attempt = 0) => {
+				if (attempt >= 10) return // Give up after ~5s total
+				const delay = attempt < 3 ? 500 : 1000
+				setTimeout(() => {
+					if (!this.client || !this._isConnected) return
+					if (shellReady || attempt >= 5) {
+						void this.client.writeToShell(setupCmd).catch(() => {})
+					} else {
+						attemptSetup(attempt + 1)
+					}
+				}, delay)
+			}
+			attemptSetup()
 
 			this._isConnected = true
 		} catch (err: unknown) {

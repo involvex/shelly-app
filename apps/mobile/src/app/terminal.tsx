@@ -588,7 +588,16 @@ export default function TerminalScreen() {
 							</TouchableOpacity>
 						))}
 						{!isScanning && scanError != null && (
-							<Text style={[ts, styles.scanErrorText]}>{scanError}</Text>
+							<Text
+								style={[
+									ts,
+									scanError.includes('no reachable SSH devices')
+										? styles.scanInfoText
+										: styles.scanErrorText,
+								]}
+							>
+								{scanError}
+							</Text>
 						)}
 						{!isScanning && hosts.length === 0 && scanError == null && (
 							<Text style={[ts, styles.noDevicesText]}>
@@ -889,11 +898,17 @@ const styles = StyleSheet.create({
 	rescanBtn: {flexDirection: 'row', alignItems: 'center', gap: 4},
 	rescanLabel: {color: '#6366f1', fontSize: 12},
 	scanErrorText: {color: '#f87171', fontSize: 12, fontStyle: 'italic'},
+	scanInfoText: {
+		color: '#71717a',
+		fontSize: 12,
+		fontStyle: 'italic',
+		lineHeight: 18,
+	},
 	discoveryDisabledText: {color: '#a1a1aa', fontSize: 12, marginBottom: 8},
 
 	// Terminal session screen
 	terminalScreen: {flex: 1, backgroundColor: '#000000'},
-	kavFlex: {flex: 1},
+	kavFlex: {flex: 1, overflow: 'hidden'},
 	terminalHeader: {
 		flexDirection: 'row',
 		alignItems: 'center',

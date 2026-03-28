@@ -54,9 +54,13 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
 	colors = TERMINAL_COLORS,
 }) => {
 	const pasteFromClipboard = async () => {
-		const text = await Clipboard.getStringAsync()
-		if (text) {
-			onSend(text)
+		try {
+			const text = await Clipboard.getStringAsync()
+			if (text) {
+				onSend(text)
+			}
+		} catch {
+			// Clipboard access may be denied on iOS/Android
 		}
 	}
 
@@ -113,6 +117,9 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
 		},
 		{label: 'Home', code: '\x1b[H', icon: null},
 		{label: 'End', code: '\x1b[F', icon: null},
+		{label: '^C', code: '\x03', icon: null},
+		{label: '^D', code: '\x04', icon: null},
+		{label: '^Z', code: '\x1a', icon: null},
 	]
 
 	return (

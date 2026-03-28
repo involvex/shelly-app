@@ -12,9 +12,9 @@ import {
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import type {SSHProfileSecrets} from '../store/useSSHProfiles'
 import {SafeAreaView} from 'react-native-safe-area-context'
+import React, {useEffect, useRef, useState} from 'react'
 import type {SSHProfile} from '../store/useSSHProfiles'
 import {PROFILE_COLORS} from '../theme/terminal'
-import React, {useEffect, useState} from 'react'
 import type {SSHAuthMode} from '@shelly/shared'
 import {scaleText} from 'react-native-text'
 
@@ -102,9 +102,19 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 		Partial<Record<keyof FormState, string>>
 	>({})
 
-	// Populate / reset form each time the modal opens.
+	// Populate / reset form only when the modal opens (visible transitions
+	// from false → true).  Using a ref guard prevents the effect from
+	// re-firing on every parent re-render caused by `initialSecrets`
+	// getting a new object reference while the user is mid-edit.
+	const initializedRef = useRef(false)
+
 	useEffect(() => {
-		if (!visible) return
+		if (!visible) {
+			initializedRef.current = false
+			return
+		}
+		if (initializedRef.current) return
+		initializedRef.current = true
 		if (initialProfile) {
 			setForm({
 				...EMPTY,
@@ -126,7 +136,7 @@ export const ProfileFormModal: React.FC<ProfileFormModalProps> = ({
 		}
 		setErrors({})
 		setSaving(false)
-	}, [visible, initialProfile, initialSecrets])
+	}, [visible])
 
 	const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
 		setForm(prev => ({...prev, [key]: value}))
