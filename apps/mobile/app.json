@@ -3,7 +3,7 @@
 	"userInterfaceStyle": "automatic",
 	"orientation": "default",
 	"owner": "involvex",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"icon": "assets/icon512x512.png",
 	"splash": {
 		"image": "assets/icon1024x1024.png",
@@ -27,7 +27,7 @@
 		"package": "com.involvex.shelly",
 		"icon": "assets/icon512x512.png",
 		"userInterfaceStyle": "automatic",
-		"versionCode": 5,
+		"versionCode": 6,
 		"permissions": [
 			"INTERNET",
 			"ACCESS_NETWORK_STATE",

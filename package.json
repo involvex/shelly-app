@@ -1,6 +1,6 @@
 {
 	"name": "shelly-app",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"private": true,
 	"repository": {
 		"url": "git+https://github.com/involvex/shelly-app.git"
