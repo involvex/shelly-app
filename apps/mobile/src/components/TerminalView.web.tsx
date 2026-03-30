@@ -1,3 +1,7 @@
+// Polyfill 'self' and other browser globals before xterm.js loads — Metro does
+// not define them and xterm references them at module evaluation time.
+import '@/lib/polyfills'
+
 import React, {
 	useCallback,
 	useEffect,
@@ -33,6 +37,10 @@ export interface TerminalViewHandle {
 	serialize: () => string
 	deserialize: (state: string) => void
 	focus: () => void
+	/** Web xterm manages its own input — always returns empty string. */
+	getInputText: () => string
+	/** Web xterm manages its own input — no-op. */
+	clearInput: () => void
 }
 
 function toXtermTheme(colors?: TerminalColors): ITheme | undefined {
@@ -86,6 +94,8 @@ export const TerminalView = React.forwardRef<
 				term.current?.write(state)
 			},
 			focus: () => term.current?.focus(),
+			getInputText: () => '',
+			clearInput: () => {},
 		}),
 		[],
 	)

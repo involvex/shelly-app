@@ -6,18 +6,67 @@ import {
 	View,
 } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import type {TerminalThemeKey} from '@/theme/terminal'
-import {useAppSettings} from '@/store/useAppSettings'
-import type {FontSize} from '@/store/useAppSettings'
+import {useAppSettings, FONT_SIZE_STEPS} from '@/store/useAppSettings'
+import type {TerminalThemeKey, TerminalColors} from '@/theme/terminal'
+import type {TerminalType} from '@/store/useAppSettings'
 import {TERMINAL_THEMES} from '@/theme/terminal'
-const FONT_SIZE_OPTIONS: {label: string; value: FontSize; hint: string}[] = [
-	{label: 'Small', value: 'small', hint: '11 px'},
-	{label: 'Medium', value: 'medium', hint: '13 px'},
-	{label: 'Large', value: 'large', hint: '15 px'},
+
+const TERMINAL_TYPE_OPTIONS: {
+	value: TerminalType
+	label: string
+	hint: string
+}[] = [
+	{
+		value: 'xterm-256color',
+		label: 'xterm-256color',
+		hint: '256-colour · recommended',
+	},
+	{value: 'xterm', label: 'xterm', hint: 'Standard xterm'},
+	{value: 'vt100', label: 'vt100', hint: 'Legacy VT100'},
+	{value: 'vt102', label: 'vt102', hint: 'Legacy VT102'},
+	{value: 'vt220', label: 'vt220', hint: 'VT220'},
+	{value: 'ansi', label: 'ansi', hint: 'ANSI'},
+	{value: 'vanilla', label: 'vanilla', hint: 'Minimal / no escape codes'},
 ]
+
+function MiniPreview({colors}: {colors: TerminalColors}) {
+	return (
+		<View
+			style={[
+				mp.wrap,
+				{backgroundColor: colors.background, borderColor: colors.border},
+			]}
+		>
+			<Text style={[mp.line, {color: colors.promptColor}]}>
+				{'$ '}
+				<Text style={{color: colors.commandText}}>ls</Text>
+			</Text>
+			<Text style={[mp.line, {color: colors.successText}]}>apps/ src/</Text>
+		</View>
+	)
+}
+
+const mp = StyleSheet.create({
+	wrap: {
+		width: 76,
+		height: 30,
+		borderRadius: 4,
+		borderWidth: 1,
+		paddingHorizontal: 4,
+		paddingVertical: 2,
+		justifyContent: 'center',
+	},
+	line: {
+		fontSize: 7,
+		lineHeight: 10,
+	},
+})
 
 export default function SettingsScreen() {
 	const {settings, update} = useAppSettings()
+	const fontSize =
+		typeof settings.fontSize === 'number' ? settings.fontSize : 13
+	const fsIdx = FONT_SIZE_STEPS.indexOf(fontSize)
 
 	return (
 		<ScrollView
@@ -48,33 +97,8 @@ export default function SettingsScreen() {
 									accessibilityState={{checked: isSelected}}
 									accessibilityLabel={`${theme.label} theme`}
 								>
-									{/* Color swatches */}
-									<View style={styles.swatchRow}>
-										<View
-											style={[
-												styles.swatch,
-												{backgroundColor: theme.colors.background},
-											]}
-										/>
-										<View
-											style={[
-												styles.swatchAccent,
-												{backgroundColor: theme.preview},
-											]}
-										/>
-										<View
-											style={[
-												styles.swatchSmall,
-												{backgroundColor: theme.colors.successText},
-											]}
-										/>
-										<View
-											style={[
-												styles.swatchSmall,
-												{backgroundColor: theme.colors.errorText},
-											]}
-										/>
-									</View>
+									{/* Mini terminal preview */}
+									<MiniPreview colors={theme.colors} />
 
 									{/* Label */}
 									<Text style={styles.themeName}>{theme.label}</Text>
@@ -98,18 +122,79 @@ export default function SettingsScreen() {
 			<View style={styles.section}>
 				<Text style={styles.sectionTitle}>Font Size</Text>
 				<View style={styles.card}>
-					{FONT_SIZE_OPTIONS.map(({label, value, hint}, index) => {
-						const isSelected = settings.fontSize === value
-						const isLast = index === FONT_SIZE_OPTIONS.length - 1
+					<View style={styles.fontSizeRow}>
+						<TouchableOpacity
+							onPress={() => {
+								const prev = FONT_SIZE_STEPS[fsIdx - 1]
+								if (prev !== undefined) update('fontSize', prev)
+							}}
+							disabled={fsIdx <= 0}
+							style={[styles.fsStepBtn, fsIdx <= 0 && styles.fsStepBtnDisabled]}
+							accessibilityLabel="Decrease font size"
+						>
+							<MaterialCommunityIcons
+								name="minus"
+								size={20}
+								color={fsIdx <= 0 ? '#3a3a3e' : '#e2e2e6'}
+							/>
+						</TouchableOpacity>
+
+						<View style={styles.fsValueWrap}>
+							<Text style={styles.fsValue}>{fontSize}</Text>
+							<Text style={styles.fsPx}>px</Text>
+						</View>
+
+						<TouchableOpacity
+							onPress={() => {
+								const next = FONT_SIZE_STEPS[fsIdx + 1]
+								if (next !== undefined) update('fontSize', next)
+							}}
+							disabled={fsIdx >= FONT_SIZE_STEPS.length - 1}
+							style={[
+								styles.fsStepBtn,
+								fsIdx >= FONT_SIZE_STEPS.length - 1 && styles.fsStepBtnDisabled,
+							]}
+							accessibilityLabel="Increase font size"
+						>
+							<MaterialCommunityIcons
+								name="plus"
+								size={20}
+								color={
+									fsIdx >= FONT_SIZE_STEPS.length - 1 ? '#3a3a3e' : '#e2e2e6'
+								}
+							/>
+						</TouchableOpacity>
+					</View>
+					{/* Step dots */}
+					<View style={styles.fsDotsRow}>
+						{FONT_SIZE_STEPS.map((s, i) => (
+							<TouchableOpacity
+								key={s}
+								onPress={() => update('fontSize', s)}
+								style={[styles.fsDot, i === fsIdx && styles.fsDotActive]}
+								accessibilityLabel={`Font size ${s}px`}
+							/>
+						))}
+					</View>
+				</View>
+			</View>
+
+			{/* ── Terminal Type ──────────────────────────────── */}
+			<View style={styles.section}>
+				<Text style={styles.sectionTitle}>Terminal Type</Text>
+				<View style={styles.card}>
+					{TERMINAL_TYPE_OPTIONS.map(({value, label, hint}, index) => {
+						const isSelected = settings.terminalType === value
+						const isLast = index === TERMINAL_TYPE_OPTIONS.length - 1
 
 						return (
 							<TouchableOpacity
 								key={value}
 								style={[styles.optionRow, isLast && styles.optionRowLast]}
-								onPress={() => update('fontSize', value)}
+								onPress={() => update('terminalType', value)}
 								accessibilityRole="radio"
 								accessibilityState={{checked: isSelected}}
-								accessibilityLabel={`Font size ${label}`}
+								accessibilityLabel={`Terminal type ${label}`}
 							>
 								<View style={styles.optionLeft}>
 									<Text style={styles.optionLabel}>{label}</Text>
@@ -208,7 +293,7 @@ const styles = StyleSheet.create({
 		flexDirection: 'row',
 		alignItems: 'center',
 		paddingHorizontal: 16,
-		paddingVertical: 13,
+		paddingVertical: 10,
 		borderBottomWidth: StyleSheet.hairlineWidth,
 		borderBottomColor: '#2a2a2e',
 		gap: 12,
@@ -219,33 +304,66 @@ const styles = StyleSheet.create({
 	themeRowSelected: {
 		backgroundColor: '#23233a',
 	},
-	swatchRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 3,
-	},
-	swatch: {
-		width: 22,
-		height: 22,
-		borderRadius: 5,
-		borderWidth: 1,
-		borderColor: '#3a3a3e',
-	},
-	swatchAccent: {
-		width: 22,
-		height: 22,
-		borderRadius: 5,
-	},
-	swatchSmall: {
-		width: 10,
-		height: 22,
-		borderRadius: 3,
-	},
 	themeName: {
 		flex: 1,
 		fontSize: 15,
 		color: '#e2e2e6',
 		fontWeight: '500',
+	},
+
+	/* Font size stepper */
+	fontSizeRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		paddingHorizontal: 16,
+		paddingVertical: 14,
+		justifyContent: 'center',
+		gap: 24,
+		borderBottomWidth: StyleSheet.hairlineWidth,
+		borderBottomColor: '#2a2a2e',
+	},
+	fsStepBtn: {
+		width: 40,
+		height: 40,
+		borderRadius: 20,
+		backgroundColor: '#2a2a2e',
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	fsStepBtnDisabled: {
+		opacity: 0.4,
+	},
+	fsValueWrap: {
+		flexDirection: 'row',
+		alignItems: 'baseline',
+		minWidth: 60,
+		justifyContent: 'center',
+		gap: 2,
+	},
+	fsValue: {
+		fontSize: 28,
+		fontWeight: '700',
+		color: '#e2e2e6',
+	},
+	fsPx: {
+		fontSize: 13,
+		color: '#6b7280',
+	},
+	fsDotsRow: {
+		flexDirection: 'row',
+		justifyContent: 'center',
+		paddingVertical: 10,
+		gap: 4,
+	},
+	fsDot: {
+		width: 6,
+		height: 6,
+		borderRadius: 3,
+		backgroundColor: '#3a3a3e',
+	},
+	fsDotActive: {
+		backgroundColor: '#6366f1',
+		width: 10,
 	},
 
 	/* Generic option rows */

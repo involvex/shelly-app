@@ -1,6 +1,27 @@
 import SSHClient, {PtyType} from '@dylankenneally/react-native-ssh-sftp'
 import type {ISSHService, SSHConfig} from '@shelly/shared'
+import type {TerminalType} from '@/store/useAppSettings'
 import {Dimensions, NativeModules} from 'react-native'
+import {useAppSettings} from '@/store/useAppSettings'
+
+function terminalTypeToPty(t: TerminalType): PtyType {
+	switch (t) {
+		case 'vt100':
+			return PtyType.VT100
+		case 'vt102':
+			return PtyType.VT102
+		case 'vt220':
+			return PtyType.VT220
+		case 'ansi':
+			return PtyType.ANSI
+		case 'vanilla':
+			return PtyType.VANILLA
+		case 'xterm':
+		case 'xterm-256color':
+		default:
+			return PtyType.XTERM
+	}
+}
 
 type DataCallback = (data: string) => void
 type ErrorCallback = (error: Error) => void
@@ -53,39 +74,120 @@ export class SSHService implements ISSHService {
 
 			// Register shell output listener before starting the shell.
 			// Track when the first data arrives (shell is ready) to time the
-			// stty/export commands correctly — Windows PowerShell can take 1-3s
+			// setup commands correctly — Windows PowerShell can take 1-3s
 			// to initialise its profile, modules, and PSReadLine.
 			let shellReady = false
+			// Accumulate the opening banner so we can detect the shell flavour.
+			let bannerBuf = ''
+			let bannerLocked = false // stop accumulating after detection
 			this.client.on('Shell', (event: {value: string} | string) => {
 				const data =
 					typeof event === 'string' ? event : (event as {value: string})?.value
 				if (data != null && data !== '') {
 					shellReady = true
+					if (!bannerLocked) {
+						bannerBuf += data
+						// Lock after 4 kB — we've seen enough to classify the shell
+						if (bannerBuf.length > 4096) bannerLocked = true
+					}
 					this.emitData(data)
 				}
 			})
 
-			await this.client.startShell(PtyType.XTERM)
+			const {terminalType} = useAppSettings.getState().settings
+			const ptyType = terminalTypeToPty(terminalType)
+			await this.client.startShell(ptyType)
 
-			// Set terminal dimensions and environment variables so programs like git,
-			// vim, and less work correctly. The SSH library starts a 0×0 PTY; without
-			// explicit stty the kernel reports a device error when git tries to open
-			// /dev/tty (the "could not read Username / No such device" error).
+			// Detect the remote shell flavour from the opening banner and send
+			// platform-appropriate environment variable setup commands.
 			//
-			// Wait for the shell to produce its first output (indicating it's alive
-			// and accepting input) before sending setup commands.  Falls back to
-			// forcing the commands after ~5s if the shell never produces output.
+			// • Unix/bash:  wrap in stty -echo/echo so the command text is not
+			//               echoed back into the terminal output.
+			// • Windows CMD: use @SET syntax (@-prefix suppresses CMD's own echo
+			//               display) then cls to clear the banner clutter.
+			// • PowerShell: use $env: assignment syntax.
+			//
+			// Falls back to the Unix path if no banner is received within ~5 s.
 			const {width, height} = Dimensions.get('window')
 			const cols = Math.max(40, Math.floor(width / 8))
-			const rows = Math.max(20, Math.floor(height / 18))
-			const setupCmd = `stty cols ${cols} rows ${rows} 2>/dev/null; export TERM=xterm-256color; export GIT_TERMINAL_PROMPT=0\r`
+			const termRows = Math.max(20, Math.floor(height / 18))
+			const termEnv =
+				terminalType === 'xterm-256color' ? 'xterm-256color' : terminalType
+
+			/** Classify the remote shell from the accumulated banner. */
+			const detectShell = (): 'cmd' | 'powershell' | 'unix' => {
+				const b = bannerBuf
+				if (/Microsoft Windows/i.test(b)) {
+					// Could be CMD or PowerShell running on top of it
+					if (/Windows PowerShell|pwsh/i.test(b)) return 'powershell'
+					return 'cmd'
+				}
+				if (/Windows PowerShell|pwsh/i.test(b)) return 'powershell'
+				// If the prompt looks like "PS C:\" it's PowerShell even without banner
+				if (/PS [A-Z]:\\/i.test(b)) return 'powershell'
+				return 'unix'
+			}
+
+			const buildSetupCmd = (shell: 'cmd' | 'powershell' | 'unix'): string => {
+				const gitEnv = 'GIT_TERMINAL_PROMPT=0'
+				const askEnv = 'GIT_ASKPASS=echo'
+				const sshAsk = 'SSH_ASKPASS=echo'
+				const msys = 'MSYS_NO_PATHCONV=1'
+
+				if (shell === 'cmd') {
+					// Each @SET suppresses CMD's own echo for that line.
+					// Chained with & so they run as one logical command line.
+					// cls at the end clears the banner + echoed setup text.
+					return (
+						`@SET "${gitEnv}"&` +
+						`@SET "${askEnv}"&` +
+						`@SET "${sshAsk}"&` +
+						`@SET "${msys}"&` +
+						`@cls\r`
+					)
+				}
+
+				if (shell === 'powershell') {
+					// Load user profile so scoop/nvm/npm PATH entries are present, then
+					// explicitly merge Machine+User PATH so git, npm, npx etc. work
+					// without "pwsh -c" wrappers.  ErrorAction SilentlyContinue prevents
+					// failures on headless sessions where $PROFILE doesn't exist.
+					return (
+						`. $PROFILE -ErrorAction SilentlyContinue; ` +
+						`$env:PATH = [System.Environment]::GetEnvironmentVariable('PATH','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH','User'); ` +
+						`$env:GIT_TERMINAL_PROMPT='0'; ` +
+						`$env:GIT_ASKPASS='echo'; ` +
+						`$env:SSH_ASKPASS='echo'; ` +
+						`$env:MSYS_NO_PATHCONV='1'; ` +
+						`Clear-Host\r`
+					)
+				}
+
+				// Unix / bash / zsh / sh
+				// stty -echo turns off PTY local echo so this command itself is not
+				// printed back into the terminal output.  We re-enable it at the end.
+				return (
+					`stty -echo 2>/dev/null; ` +
+					`stty cols ${cols} rows ${termRows} 2>/dev/null; ` +
+					`export TERM=${termEnv}; ` +
+					`export GIT_TERMINAL_PROMPT=0; ` +
+					`export GIT_ASKPASS=echo; ` +
+					`export SSH_ASKPASS=echo; ` +
+					`export MSYS_NO_PATHCONV=1; ` +
+					`unset DISPLAY; ` +
+					`stty echo 2>/dev/null\r`
+				)
+			}
 
 			const attemptSetup = (attempt = 0) => {
-				if (attempt >= 10) return // Give up after ~5s total
+				if (attempt >= 10) return // Give up after ~5 s total
 				const delay = attempt < 3 ? 500 : 1000
 				setTimeout(() => {
 					if (!this.client || !this._isConnected) return
 					if (shellReady || attempt >= 5) {
+						bannerLocked = true // freeze the banner buffer
+						const shell = detectShell()
+						const setupCmd = buildSetupCmd(shell)
 						void this.client.writeToShell(setupCmd).catch(() => {})
 					} else {
 						attemptSetup(attempt + 1)

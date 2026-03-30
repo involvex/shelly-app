@@ -13,6 +13,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context'
 import type {SSHProfile, SSHProfileSecrets} from '../store/useSSHProfiles'
 import {SnippetManagerModal} from '../components/SnippetManagerModal'
+import type {TerminalViewHandle} from '../components/TerminalView'
 import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {ProfileFormModal} from '../components/ProfileFormModal'
 import {TerminalToolbar} from '../components/TerminalToolbar'
@@ -97,6 +98,7 @@ export default function TerminalScreen() {
 	 */
 	const startupCommandRef = useRef<string | null>(null)
 	const prevConnectedRef = useRef(false)
+	const terminalViewRef = useRef<TerminalViewHandle>(null)
 
 	// Trigger startup command when connection becomes active.
 	useEffect(() => {
@@ -712,21 +714,25 @@ export default function TerminalScreen() {
 
 				<View style={styles.terminalBody}>
 					<TerminalView
+						ref={terminalViewRef}
 						output={output}
 						onData={sendData}
 						fontSize={
-							appSettings.fontSize === 'small'
-								? 11
-								: appSettings.fontSize === 'large'
-									? 15
-									: 13
+							typeof appSettings.fontSize === 'number'
+								? appSettings.fontSize
+								: 13
 						}
 						onProgress={setProgressState}
 					/>
 				</View>
 
 				{/* Toolbar sits just above the keyboard thanks to paddingBottom */}
-				<TerminalToolbar onSend={sendData} colors={terminalColors} />
+				<TerminalToolbar
+					onSend={sendData}
+					colors={terminalColors}
+					getInputText={() => terminalViewRef.current?.getInputText() ?? ''}
+					clearInput={() => terminalViewRef.current?.clearInput()}
+				/>
 			</View>
 
 			<SnippetManagerModal

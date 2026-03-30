@@ -1,14 +1,31 @@
 import {DarkTheme, DefaultTheme, ThemeProvider} from '@react-navigation/native'
 import {MoreMenu, PageMenu, SortMenu} from '@/components/menus'
+import {useSnippetStore} from '@/store/useSnippetStore'
+import {useSSHProfiles} from '@/store/useSSHProfiles'
+import {useKeybarStore} from '@/store/useKeybarStore'
+import {useAppSettings} from '@/store/useAppSettings'
 import {useColorScheme, View} from 'react-native'
 import * as AC from '@bacons/apple-colors'
 import {useProject} from '@/data/project'
 import {MaterialIcons} from './icons'
 import {Stack} from 'expo-router'
+import {useEffect} from 'react'
 
 export default function NativeRootLayout() {
 	const {project} = useProject()
 	const colorScheme = useColorScheme()
+
+	// Load all persisted stores once on app start.
+	const loadSettings = useAppSettings(s => s.load)
+	const loadKeybar = useKeybarStore(s => s.load)
+	const loadProfiles = useSSHProfiles(s => s.load)
+	const loadSnippets = useSnippetStore(s => s.loadSnippets)
+	useEffect(() => {
+		void loadSettings()
+		void loadKeybar()
+		void loadProfiles()
+		void loadSnippets()
+	}, [loadSettings, loadKeybar, loadProfiles, loadSnippets])
 	return (
 		<ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
 			<Stack>
@@ -55,6 +72,17 @@ export default function NativeRootLayout() {
 				/>
 				{/* Terminal manages its own header via SafeAreaView */}
 				<Stack.Screen name="terminal" options={{headerShown: false}} />
+				{/* Keybar row editor */}
+				<Stack.Screen
+					name="keybar-editor"
+					options={{
+						title: 'Keybar',
+						headerStyle: {backgroundColor: '#0f0f0f'},
+						headerTintColor: '#e2e2e6',
+						headerTitleStyle: {fontWeight: '600', color: '#e2e2e6'},
+						headerShadowVisible: false,
+					}}
+				/>
 				{/* Settings uses a styled native header */}
 				<Stack.Screen
 					name="settings"

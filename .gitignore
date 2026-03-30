@@ -155,3 +155,5 @@ vite.config.ts.timestamp-*
 */*/.expo
 
 gha-creds-*.json
+
+*.log
