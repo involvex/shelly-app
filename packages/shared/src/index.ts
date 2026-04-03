@@ -27,6 +27,8 @@ export interface ISSHService {
 	connect(config: SSHConfig): Promise<void>
 	disconnect(): Promise<void>
 	write(data: string): Promise<void>
+	/** Send a single character to the shell. Alias for write() - exists for API clarity. */
+	writeChar(char: string): Promise<void>
 	onData(callback: (data: string) => void): () => void // Returns unsubscribe
 	onError(callback: (error: Error) => void): () => void
 	isConnected(): boolean

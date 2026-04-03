@@ -185,6 +185,9 @@ export default function TerminalScreen() {
 		updateSetting('keyPassphrase', secrets.keyPassphrase)
 		// Stash the startup command to send after connecting.
 		startupCommandRef.current = p.startupCommand ?? null
+
+		// Auto-connect immediately after selecting profile
+		await handleConnect()
 	}
 
 	const handleOpenAddProfile = () => {

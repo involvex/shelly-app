@@ -93,6 +93,10 @@ export class WebSocketSSHService implements ISSHService {
 		this.socket.send(JSON.stringify({type: 'data', payload: data}))
 	}
 
+	async writeChar(char: string): Promise<void> {
+		return this.write(char)
+	}
+
 	onData(callback: Callback<string>): () => void {
 		this.dataListeners.push(callback)
 		return () => {

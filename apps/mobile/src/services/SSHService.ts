@@ -234,6 +234,10 @@ export class SSHService implements ISSHService {
 		await this.client.writeToShell(data)
 	}
 
+	async writeChar(char: string): Promise<void> {
+		return this.write(char)
+	}
+
 	onData(callback: DataCallback): () => void {
 		this.dataListeners.push(callback)
 		return () => {
@@ -249,10 +253,14 @@ export class SSHService implements ISSHService {
 	}
 
 	private emitData(data: string) {
-		this.dataListeners.forEach(cb => cb(data))
+		for (const cb of this.dataListeners) {
+			cb(data)
+		}
 	}
 
 	private emitError(error: Error) {
-		this.errorListeners.forEach(cb => cb(error))
+		for (const cb of this.errorListeners) {
+			cb(error)
+		}
 	}
 }

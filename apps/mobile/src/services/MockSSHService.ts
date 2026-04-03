@@ -70,6 +70,10 @@ export class MockSSHService implements ISSHService {
 		}
 	}
 
+	async writeChar(char: string): Promise<void> {
+		return this.write(char)
+	}
+
 	private processCommand(cmd: string) {
 		const trimmed = cmd.trim()
 		if (trimmed === 'ls' || trimmed === 'dir') {
@@ -117,10 +121,14 @@ export class MockSSHService implements ISSHService {
 	}
 
 	private emitData(data: string) {
-		this.dataListeners.forEach(cb => cb(data))
+		for (const cb of this.dataListeners) {
+			cb(data)
+		}
 	}
 
 	private emitError(error: Error) {
-		this.errorListeners.forEach(cb => cb(error))
+		for (const cb of this.errorListeners) {
+			cb(error)
+		}
 	}
 }

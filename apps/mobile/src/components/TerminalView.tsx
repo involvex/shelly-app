@@ -8,16 +8,28 @@ import {
 } from 'react'
 import {TERMINAL_THEMES, TERMINAL_COLORS} from '../theme/terminal'
 import {useCommandHistory} from '../hooks/useCommandHistory'
-import {CommandInput, TerminalOutput} from './terminal'
 import {useAppSettings} from '../store/useAppSettings'
+import {KeyCapture, TerminalOutput} from './terminal'
 import {StyleSheet, View} from 'react-native'
 import type {TextInput} from 'react-native'
 
 // Strip ANSI escape sequences so raw terminal codes don't appear as garbage.
-const ANSI_RE =
-	// oxlint-disable-next-line no-control-regex
-	// eslint-disable-next-line no-control-regex
-	/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[()][A-Za-z0-9]|\x1b[=>]/g
+// Uses String.fromCharCode to avoid eslint false positive on control chars in regex.
+const ANSI_RE = new RegExp(
+	String.fromCharCode(0x1b) +
+		'\\[[0-9;?]*[A-Za-z]|' +
+		String.fromCharCode(0x1b) +
+		'\\][^' +
+		String.fromCharCode(0x07) +
+		']*' +
+		String.fromCharCode(0x07) +
+		'|' +
+		String.fromCharCode(0x1b) +
+		'[()][A-Za-z0-9]|' +
+		String.fromCharCode(0x1b) +
+		'[=>]',
+	'g',
+)
 
 function processOutput(raw: string): string {
 	return raw
@@ -46,7 +58,7 @@ export interface TerminalViewHandle {
 /**
  * Native terminal view composing:
  *   TerminalOutput   — scrollable SSH output area (auto-scrolls)
- *   CommandInput     — keyboard-aware input row with history navigation
+ *   KeyCapture       — character-level input for real-time shell interaction
  *
  * NOTE: keyboard avoidance is handled by the parent screen's
  * `KeyboardAvoidingView` which also wraps `TerminalToolbar`.  Do NOT add a
@@ -67,25 +79,26 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(
 		// Derive display text — no extra state, pure memoisation.
 		const displayText = useMemo(() => processOutput(output ?? ''), [output])
 
-		const sendInput = useCallback(() => {
-			const text = inputText.trim()
-			if (!text) return
-			addCommand(text)
-			// SSH shells expect CR (\r) as "Enter", not LF.
-			onData(text + '\r')
-			setInputText('')
-			// Keep focus so the user can immediately type the next command.
-			inputRef.current?.focus()
-		}, [inputText, onData, addCommand])
+		/** Send data directly to shell - for character streaming */
+		const sendData = useCallback(
+			(data: string) => {
+				onData(data)
+			},
+			[onData],
+		)
 
 		const handleNavigateUp = useCallback(() => {
 			const cmd = navigateUp()
-			if (cmd !== null) setInputText(cmd)
+			if (cmd !== null) {
+				setInputText(cmd)
+			}
 		}, [navigateUp])
 
 		const handleNavigateDown = useCallback(() => {
 			const cmd = navigateDown()
-			if (cmd !== null) setInputText(cmd)
+			if (cmd !== null) {
+				setInputText(cmd)
+			}
 		}, [navigateDown])
 
 		// Expose input buffer access to parent (used by TerminalToolbar for
@@ -109,10 +122,11 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(
 					colors={colors}
 					fontSize={fontSize}
 				/>
-				<CommandInput
+				<KeyCapture
 					value={inputText}
 					onChangeText={setInputText}
-					onSubmit={sendInput}
+					onSend={sendData}
+					onAddCommand={addCommand}
 					onNavigateUp={handleNavigateUp}
 					onNavigateDown={handleNavigateDown}
 					inputRef={inputRef}

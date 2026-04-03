@@ -1,4 +1,5 @@
 export {CommandInput} from './CommandInput'
 export {HistoryItem} from './HistoryItem'
+export {KeyCapture} from './KeyCapture'
 export {TerminalOutput} from './TerminalOutput'
 export {TerminalPrompt} from './TerminalPrompt'

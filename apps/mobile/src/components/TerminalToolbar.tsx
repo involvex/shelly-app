@@ -99,6 +99,24 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
 				</ScrollView>
 			))}
 
+			{/* Tab button - only visible when expanded */}
+			{isExpanded && (
+				<View style={styles.tabRow}>
+					<TouchableOpacity
+						onPress={() => onSend('\t')}
+						style={[
+							styles.keyBtn,
+							styles.tabBtn,
+							{backgroundColor: colors.surfaceActive},
+						]}
+						accessibilityRole="button"
+						accessibilityLabel="Tab"
+					>
+						<Text style={styles.keyLabel}>Tab</Text>
+					</TouchableOpacity>
+				</View>
+			)}
+
 			{/* Control bar: paste | expand toggle + gear */}
 			<View style={[styles.controlBar, {borderTopColor: colors.border}]}>
 				<TouchableOpacity
@@ -215,5 +233,14 @@ const styles = StyleSheet.create({
 	ctrlMuted: {
 		fontSize: 11,
 		fontWeight: '500',
+	},
+	tabRow: {
+		paddingHorizontal: 4,
+		paddingVertical: 3,
+		borderTopWidth: StyleSheet.hairlineWidth,
+		borderTopColor: '#27272a',
+	},
+	tabBtn: {
+		paddingHorizontal: 16,
 	},
 })
