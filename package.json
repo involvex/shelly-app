@@ -1,6 +1,6 @@
 {
 	"name": "shelly-app",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"private": true,
 	"repository": {
 		"url": "git+https://github.com/involvex/shelly-app.git"
@@ -33,19 +33,19 @@
 		"jiti": "^2.6.1"
 	},
 	"devDependencies": {
-		"@eslint/css": "^1.0.0",
+		"@eslint/css": "^1.1.0",
 		"@eslint/js": "^10.0.1",
 		"@involvex/prettier-config": "latest",
 		"@types/bun": "latest",
-		"@types/node": "^25.5.0",
-		"eslint": "^10.1.0",
+		"@types/node": "^25.5.2",
+		"eslint": "^10.2.0",
 		"eslint-plugin-react": "^7.37.5",
 		"globals": "^17.4.0",
 		"prettier": "^3.8.1",
 		"prettier-plugin-organize-imports": "^4.3.0",
 		"prettier-plugin-packagejson": "^3.0.2",
 		"prettier-plugin-sort-imports": "^1.8.11",
-		"typescript-eslint": "^8.57.1"
+		"typescript-eslint": "^8.58.0"
 	},
 	"peerDependencies": {
 		"typescript": "^5"
